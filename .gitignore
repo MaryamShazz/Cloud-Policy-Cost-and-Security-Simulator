@@ -216,3 +216,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+
+# PostgreSQL
+backend/pgdata/
+backend/pgpass.txt
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.uvenv/
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Environment
+.env
+.env.*
