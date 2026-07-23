@@ -1,35 +1,49 @@
-# Backend
+# ⚙️ Backend
 
-This directory contains the backend implementation of the **Cloud Policy Cost and Security Simulator**.
-
-The backend is developed using **Flask** and provides the REST API, business logic, AI assisted threat detection, cloud resource simulation, governance validation, and PostgreSQL database integration.
+Backend implementation of the **Cloud Policy Cost and Security Simulator**, a Digital Twin platform designed to simulate cloud infrastructure, governance, FinOps, and cybersecurity workflows in a safe educational environment.
 
 ---
 
-## Features
+## 🚀 Overview
 
-- User authentication and authorization
-- Organization management
-- Virtual machine and database simulation
-- Synthetic telemetry generation
-- AI assisted threat detection
-- Governance policy validation
-- Resource monitoring
-- Cost management
-- Reporting services
-- RESTful API
-- PostgreSQL database integration
+The backend is built using **Flask** and serves as the core engine of the simulator. It manages cloud resources, user authentication, organizations, telemetry generation, AI-assisted threat detection, governance validation, reporting, and PostgreSQL database operations.
 
 ---
 
-## Project Structure
+# ✨ Core Features
 
-```
+- 🔐 Authentication & Authorization
+- 🏢 Organization & Tenant Management
+- 🖥️ Virtual Machine Simulation
+- 🗄️ Database Simulation
+- 📊 Synthetic Telemetry Generation
+- 🤖 AI-Assisted Threat Detection
+- 🛡️ Governance Policy Validation
+- 📈 Resource Monitoring
+- 💰 Cost Management
+- 📄 Report Generation
+- 🌐 RESTful API
+- 🗃️ PostgreSQL Integration
+
+---
+
+# 📁 Directory Structure
+
+```text
 backend/
+│
 ├── app/
+│   ├── ai_models/
+│   ├── data_sources/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   └── utils/
+│
 ├── data/
 ├── migrations/
 ├── scripts/
+│
 ├── requirements.txt
 ├── run.py
 └── wsgi.py
@@ -37,15 +51,29 @@ backend/
 
 ---
 
-## Installation
+# 🛠️ Technology Stack
 
-Install dependencies:
+| Category | Technology |
+|-----------|------------|
+| Backend Framework | Flask |
+| Language | Python |
+| Database | PostgreSQL |
+| ORM | SQLAlchemy |
+| Database Migration | Alembic |
+| API | REST |
+| AI | Machine Learning Models |
+
+---
+
+# ▶️ Getting Started
+
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run the application:
+### Run the Backend
 
 ```bash
 python run.py
@@ -53,19 +81,31 @@ python run.py
 
 ---
 
-## Technologies
+# 📌 Current Development Status
 
-- Flask
-- Python
-- PostgreSQL
-- SQLAlchemy
-- Alembic
-- REST API
+| Module | Status |
+|---------|:------:|
+| Authentication | ✅ |
+| Organization Manager | ✅ |
+| Data Generator | ✅ |
+| Resource Simulator | ✅ |
+| Resource Viewer | ✅ |
+| Threat Detector | ✅ |
+| Policy Engine | 🚧 |
+| Cost Forecaster | 🚧 |
+| Report Generator | 🚧 |
+| Remediation Agent | 🚧 |
+| Audit Trail | 🚧 |
+| User Settings | 🚧 |
 
 ---
 
-## Status
+# 🎯 Project Goal
 
-🚧 This backend is under active development as part of a two semester undergraduate capstone project.
+The objective of this backend is to provide a reusable cloud simulation environment that enables students, researchers, and beginner cloud professionals to safely explore cloud governance, infrastructure monitoring, FinOps, and cybersecurity concepts without relying on production cloud platforms.
 
-Additional modules including the Policy Engine, Cost Forecaster, Report Generator, Remediation Agent, Audit Trail, and User Settings will be completed during the final development phase.
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
