@@ -1,9 +1,3 @@
-"""Deterministic topology mini-map generation for the dashboard.
-
-The dashboard consumes the returned snapshot payload directly so the frontend
-does not maintain a second topology source of truth. The layout is compact,
-lightweight, and intentionally graph-engine free.
-"""
 
 from __future__ import annotations
 
@@ -70,12 +64,6 @@ def _grid_positions(count: int, *, x_start: float, x_end: float, y_start: float,
 
 
 def build_topology_mini_map(org_id: int, snapshot: dict | None = None) -> dict:
-    """Build a compact org-scoped infrastructure mini-map.
-
-    The return value contains fixed coordinates so the frontend can render the
-    map with simple SVG lines and positioned cards.
-    """
-
     snapshot = snapshot or {}
     topology = snapshot.get("topology", {}) or {}
     workload = snapshot.get("workload", {}) or {}
