@@ -8,9 +8,7 @@ load_dotenv(override=True)
 
 PG_URL = 'postgresql://abdur:admin123@localhost:5433/cloud_simulator'
 
-
 def _normalize_base_url(url, fallback):
-    """Return a safe absolute base URL without a trailing slash."""
     candidate = (url or fallback or '').strip()
     if not candidate:
         return ''
@@ -24,23 +22,18 @@ def _normalize_base_url(url, fallback):
     return urlunsplit(normalized)
 
 class Config:
-    """Base configuration class."""
-    # App Settings
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
-    # Database — PostgreSQL only; SQLite is NOT supported
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or PG_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 5,
         'pool_recycle': 60,
     }
-    # JWT Settings
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-change-in-production'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
-    # Redis
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
-    # Email
+    
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
@@ -51,20 +44,19 @@ class Config:
         os.environ.get('FRONTEND_BASE_URL') or os.environ.get('PUBLIC_APP_URL'),
         '',
     )
-    # AI/ML Settings
     MODEL_PATH = os.environ.get('MODEL_PATH') or './ai_training/models'
     DATASET_PATH = os.environ.get('DATASET_PATH') or './data'
     FINOPS_DATASET_PATH = os.environ.get('FINOPS_DATASET_PATH') or os.path.join(DATASET_PATH, 'finops')
     SECURITY_DATASET_PATH = os.environ.get('SECURITY_DATASET_PATH') or os.path.join(DATASET_PATH, 'cicids_subset.csv')
     GOVERNANCE_DATASET_PATH = os.environ.get('GOVERNANCE_DATASET_PATH') or os.path.join(DATASET_PATH, 'governance')
     SIMULATOR_CORE_DATASET_PATH = os.environ.get('SIMULATOR_CORE_DATASET_PATH') or os.path.join(DATASET_PATH, 'simulator_core')
-    # Simulation Settings
+  
     SIMULATION_TICK_INTERVAL = int(os.environ.get('SIMULATION_TICK_INTERVAL', 5))
     MAX_SIMULATED_RESOURCES = int(os.environ.get('MAX_SIMULATED_RESOURCES', 100))
     DEFAULT_CURRENCY = os.environ.get('DEFAULT_CURRENCY', 'USD')
     ENABLE_SIMULATION_THREADS = os.environ.get('ENABLE_SIMULATION_THREADS', 'true').lower() == 'true'
     ENABLE_REALTIME_METRICS = os.environ.get('ENABLE_REALTIME_METRICS', 'true').lower() == 'true'
-    # Pricing (Simulated AWS-like pricing per hour)
+    
     VM_PRICING = {
         't2.micro': 0.0116,
         't2.small': 0.023,
