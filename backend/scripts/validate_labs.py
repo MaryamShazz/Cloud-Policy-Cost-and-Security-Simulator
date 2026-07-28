@@ -67,7 +67,6 @@ def run_lab2():
     requests.post(f"{BASE_URL}/resources/vms", json={"name": "costly-vm", "organization_id": org_id}, headers=headers)
     requests.post(f"{BASE_URL}/scenarios/2/run", json={"org_id": org_id}, headers=headers)
     
-    # Step 1: monthly_spend > 0
     print("Waiting for Step 1...")
     for _ in range(10):
         valid, msg, snap = validate_step(2, 1, org_id, headers)
@@ -80,7 +79,6 @@ def run_lab2():
         print(f"Step 1 FAILED: {msg}")
         return False
     
-    # Step 2: budget_created
     requests.post(f"{BASE_URL}/cost/budgets", json={
         "organization_id": org_id, "name": "Lab Budget", "amount": 100, "start_date": "2026-05-01"
     }, headers=headers)
@@ -92,7 +90,6 @@ def run_lab2():
         print(f"Step 2 FAILED: {msg}")
         return False
         
-    # Step 3: current_month_spend <= 500
     valid, msg, snap = validate_step(2, 3, org_id, headers)
     if valid:
         print(f"Step 3 PASSED: {msg}")
@@ -109,10 +106,8 @@ def run_lab3():
     token, org_id = get_auth("lab3")
     headers = {"Authorization": f"Bearer {token}"}
     
-    # Start scenario
     requests.post(f"{BASE_URL}/scenarios/3/run", json={"org_id": org_id}, headers=headers)
     
-    # Step 1: security_score < 100 (Trigger threat)
     print("Triggering attack for Step 1...")
     r = requests.post(f"{BASE_URL}/security/simulate-attack", json={"org_id": org_id, "attack_type": "brute_force"}, headers=headers)
     threat_id = r.json().get("threat_id")
@@ -129,13 +124,11 @@ def run_lab3():
         print(f"Step 1 FAILED: {msg}")
         return False
         
-    # Step 2: security_rule_updated (Hardcoded True)
     valid, msg, snap = validate_step(3, 2, org_id, headers)
     if valid:
         print(f"Step 2 PASSED: {msg}")
         save_progress(3, 2, org_id, headers)
     
-    # Step 3: threat_resolved
     print("Resolving threat for Step 3...")
     requests.post(f"{BASE_URL}/security/threats/{threat_id}/resolve", json={}, headers=headers)
     valid, msg, snap = validate_step(3, 3, org_id, headers)
@@ -155,8 +148,7 @@ def run_lab4():
     headers = {"Authorization": f"Bearer {token}"}
     
     requests.post(f"{BASE_URL}/scenarios/4/run", json={"org_id": org_id}, headers=headers)
-    
-    # Step 1: health_score < 100 (Trigger threat to lower score)
+
     print("Triggering attack for Step 1...")
     r = requests.post(f"{BASE_URL}/security/simulate-attack", json={"org_id": org_id, "attack_type": "ddos"}, headers=headers)
     threat_id = r.json().get("threat_id")
@@ -171,10 +163,8 @@ def run_lab4():
         time.sleep(2)
     else:
         print(f"Step 1 FAILED: {msg}")
-        # Continue anyway as score might be sticky
         save_progress(4, 1, org_id, headers)
 
-    # Step 2: vm_exists "restored-server"
     print("Provisioning 'restored-server' for Step 2...")
     requests.post(f"{BASE_URL}/resources/vms", json={"name": "restored-server", "organization_id": org_id}, headers=headers)
     valid, msg, snap = validate_step(4, 2, org_id, headers)
@@ -185,7 +175,6 @@ def run_lab4():
         print(f"Step 2 FAILED: {msg}")
         return False
         
-    # Step 3: health_score >= 50
     print("Resolving threat for Step 3...")
     requests.post(f"{BASE_URL}/security/threats/{threat_id}/resolve", json={}, headers=headers)
     
@@ -209,7 +198,6 @@ if __name__ == "__main__":
     s2 = run_lab2()
     s3 = run_lab3()
     s4 = run_lab4()
-    
     print("\n=== FINAL STATUS ===")
     print(f"Lab 1: {'PASSED' if s1 else 'FAILED'}")
     print(f"Lab 2: {'PASSED' if s2 else 'FAILED'}")
