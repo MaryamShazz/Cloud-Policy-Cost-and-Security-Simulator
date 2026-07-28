@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Cloud Policy, Cost and Security Simulator - Main Entry Point
-Final Year Project 2026
-SZABIST University Islamabad
-"""
 import eventlet
 
 eventlet.monkey_patch()
@@ -15,11 +10,9 @@ from app.models import *
 from app.data_sources.real_datasets import dataset_catalog
 
 load_dotenv()
-# Create app instance
 app = create_app(os.getenv('FLASK_ENV', 'development'))
 @app.shell_context_processor
 def make_shell_context():
-    """Make database models available in shell."""
     return {
         'db': db,
         'User': User,
@@ -32,12 +25,12 @@ def make_shell_context():
     }
 @app.cli.command()
 def init_db():
-    """Initialize database with tables."""
+    """Initializing database"""
     db.create_all()
     print("Database initialized successfully!")
 @app.cli.command()
 def seed_data():
-    """Validate that real datasets are present."""
+    """checking datasets"""
     availability = dataset_catalog.list_available_files()
     if not any(availability.values()):
         print("No real datasets found.")
@@ -50,7 +43,7 @@ def seed_data():
             print(f"  - {path}")
 @app.cli.command()
 def train_models():
-    """Smoke-test the real-data-backed intelligence modules."""
+    """testing ai modules."""
     from app.ai_models.threat_detector import threat_detector
     from app.ai_models.cost_forecaster import cost_forecaster
 
@@ -70,11 +63,7 @@ def train_models():
 
     print("Real-data smoke test complete.")
 if __name__ == '__main__':
-    print("Cloud Policy, Cost and Security Simulator v1.0")
-    print("Final Year Project 2026 - SZABIST University Islamabad")
     print("Starting server on http://localhost:5000 ...")
-    # Run with SocketIO for real-time updates
-    # debug=False and use_reloader=False are CRITICAL to ensure only ONE process runs.
     socketio.run(
         app,
         host='0.0.0.0',
