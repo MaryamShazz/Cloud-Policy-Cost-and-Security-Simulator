@@ -9,7 +9,6 @@ BASE_URL = "http://localhost:5000/api"
 def run_lab_1():
     print("=== Validating Lab 1: Scaling Failure ===")
     
-    # 1. Register
     email = f"lab1_{uuid.uuid4().hex[:6]}@example.com"
     password = "Password123!"
     reg_data = {
@@ -23,8 +22,7 @@ def run_lab_1():
         print(f"Register failed: {r.text}")
         return
     print("Register: SUCCESS")
-    
-    # 2. Login
+
     r = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": password})
     if r.status_code != 200:
         print(f"Login failed: {r.text}")
@@ -34,8 +32,7 @@ def run_lab_1():
     org_id = auth_data["active_org_id"]
     headers = {"Authorization": f"Bearer {token}"}
     print(f"Login: SUCCESS (Org: {org_id})")
-    
-    # 3. Start Scenario 1
+  
     print("Provisioning initial VM...")
     r = requests.post(f"{BASE_URL}/resources/vms", json={
         "name": "web-server-01",
@@ -50,14 +47,12 @@ def run_lab_1():
     vm_id = r.json()["data"]["id"]
     print(f"VM Created: ID={vm_id}")
 
-    # Start simulation
     r = requests.post(f"{BASE_URL}/scenarios/1/run", json={"org_id": org_id}, headers=headers)
     if r.status_code != 202:
         print(f"Start Scenario failed: {r.text}")
         return
     print("Scenario Started: SUCCESS")
-    
-    # Step 1: Spot the bottleneck (bpi > 0)
+  
     print("Waiting for bottleneck (BPI > 0)...")
     for _ in range(30):
         r = requests.post(f"{BASE_URL}/scenarios/1/validate-step", 
@@ -84,7 +79,6 @@ def run_lab_1():
         print("Step 1 Validation TIMEOUT")
         return
 
-    # Step 2: Scale out safely (action contains 'scale_up')
     print("Waiting for scale-out action...")
     for _ in range(30):
         r = requests.post(f"{BASE_URL}/scenarios/1/validate-step", 
@@ -106,7 +100,6 @@ def run_lab_1():
         print("Step 2 Validation TIMEOUT")
         return
 
-    # Step 3: Verify recovery (capacity >= 1)
     print("Waiting for recovery (Capacity >= 1)...")
     r = requests.post(f"{BASE_URL}/scenarios/1/validate-step", 
                       json={"step_id": 3, "org_id": org_id}, 
@@ -119,11 +112,9 @@ def run_lab_1():
         print(f"Step 3 Validation FAILED: {data['message'] if data else 'No data'}")
         return
 
-    # Complete Scenario
     r = requests.post(f"{BASE_URL}/scenarios/1/complete", json={"org_id": org_id}, headers=headers)
     print(f"Scenario Complete: {r.status_code}")
-    
-    # Verify XP
+ 
     r = requests.get(f"{BASE_URL}/progress/profile", headers=headers)
     print(f"Total XP: {r.json()['data']['total_points']}")
     print("Lab 1 Validation: PASSED")
