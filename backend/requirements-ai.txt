@@ -1,5 +1,4 @@
-# Optional AI/ML dependencies for later project phases.
-# These are not required for the P1 mid application to run.
+# AI/ML dependencies
 
 tensorflow==2.13.0
 keras==2.13.1
