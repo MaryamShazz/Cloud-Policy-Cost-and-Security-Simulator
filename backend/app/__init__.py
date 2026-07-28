@@ -8,14 +8,13 @@ from flask_mail import Mail
 from flask_socketio import SocketIO, join_room
 from werkzeug.exceptions import HTTPException
 from app.config import config
-# Initialize extensions
+
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 mail = Mail()
 socketio = SocketIO(cors_allowed_origins="*", async_mode='eventlet', cors_credentials=True, ping_timeout=60, ping_interval=25)
 
-# Import simulation_engine after socketio to avoid circular imports
 from app.services.simulation_engine import SimulationEngine
 from flask_socketio import join_room, leave_room, rooms
 
@@ -24,7 +23,6 @@ simulation_engine = SimulationEngine()
 
 @socketio.on('join_room', namespace='/metrics')
 def handle_join_room(data):
-    """Allow clients to join an org-scoped room on the /metrics namespace and leave previous ones."""
     if isinstance(data, dict):
         org_id = data.get('org_id')
         try:
@@ -34,7 +32,6 @@ def handle_join_room(data):
 
         if org_id is not None:
             room = f'org_{org_id}'
-            # Leave previous org rooms to prevent duplicate events and cross-org leakage
             for r in rooms():
                 if r.startswith('org_') and r != room:
                     leave_room(r)
@@ -51,10 +48,8 @@ def _json_error(message, status_code=500, code='internal_error'):
 
 
 def create_app(config_name='default'):
-    """Application factory pattern."""
     app = Flask(__name__)
     app.config.from_object(config[config_name])
-    # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -80,7 +75,6 @@ def create_app(config_name='default'):
         app.logger.exception('Unhandled application error')
         return _json_error('Internal server error', status_code=500, code='internal_error')
 
-    # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.organization import org_bp
     from app.routes.resources import resource_bp
@@ -116,14 +110,10 @@ def create_app(config_name='default'):
     from app.routes.learning_timeline import timeline_bp
     app.register_blueprint(timeline_bp, url_prefix='/api/learning')
 
-    # Create database tables
     with app.app_context():
         db.create_all()
 
         if not app.config.get('TESTING'):
-            # ── Control-plane snapshot cache (2-second refresh) ───────────────
-            # Provides fast dashboard reads without blocking HTTP request threads
-            # on heavy simulation computation.
             from app.services.control_plane import start_control_plane_loop
             start_control_plane_loop()
 
@@ -131,9 +121,6 @@ def create_app(config_name='default'):
             from app.services.metrics_streamer import metrics_streamer
             metrics_streamer.start()
 
-        # ResourceSimulator — handles DES telemetry, ML security analysis,
-        # per-VM RPS history, and autoscaling.  This is the primary simulation
-        # thread; control_plane.py provides the MAPE loop and snapshot cache.
         if app.config.get('ENABLE_SIMULATION_THREADS') and not app.config.get('TESTING'):
             app.simulator.start(app)
 
