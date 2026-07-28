@@ -1,7 +1,4 @@
-# Core runtime dependencies for the P1 mid structure.
-# The AI/ML stack is intentionally kept separate so the app can install
-# and run without pulling heavy optional packages that are not part of the
-# current phase.
+# Project dependencies in order as i find it satisfying
 
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
