@@ -1,10 +1,4 @@
-"""security groups autoscaling storage
 
-Revision ID: ef53ad265c44
-Revises: 
-Create Date: 2026-05-02 16:42:02.737459
-
-"""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import sqlite
