@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-"""Create a lightweight CICIDS2017 subset for Chromebook/Crostini use.
-
-This script streams the large cleaned dataset in chunks, keeps a uniform
-reservoir sample of 3000 rows, shuffles the final subset, and writes the
-result to backend/data/cicids_subset.csv.
-
-Only pandas plus the Python standard library are used.
-"""
 
 from __future__ import annotations
-
 import os
 import random
 from pathlib import Path
-
 import pandas as pd
 
 
@@ -26,7 +16,6 @@ RANDOM_SEED = 42
 
 
 def reservoir_sample_csv(source_path: Path, target_rows: int, chunk_size: int, seed: int) -> pd.DataFrame:
-    """Sample `target_rows` uniformly from a CSV without loading it all at once."""
     rng = random.Random(seed)
     reservoir: list[tuple] = []
     columns: list[str] | None = None
