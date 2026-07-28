@@ -8,7 +8,6 @@ with app.app_context():
     print("Beginning system reset transaction...")
     db.session.begin()
     try:
-        # Task 1 & 3: Safe bulk delete
         db.session.execute(text("DELETE FROM cost_records;"))
         db.session.execute(text("DELETE FROM audit_logs;"))
         db.session.execute(text("DELETE FROM threat_detections;"))
@@ -16,8 +15,6 @@ with app.app_context():
         db.session.execute(text("DELETE FROM virtual_machines;"))
         db.session.execute(text("DELETE FROM databases;"))
         print("Bulk deleted VMs and related records.")
-        
-        # Task 5: Create clean baseline
         from app.models.organization import Organization
         from app.models.resources import VirtualMachine, ResourceStatus
         import random, string, datetime
@@ -45,11 +42,9 @@ with app.app_context():
             )
             db.session.add(vm)
             print("Baseline VM created.")
-        
-        # Task 2: Commit transaction
+      
         db.session.commit()
-        print("Transaction committed successfully.")
-        
+        print("Transaction committed successfully.")  
     except Exception as e:
         db.session.rollback()
         print(f"Error during reset, rolled back: {e}")
