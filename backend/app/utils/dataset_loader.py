@@ -1,4 +1,3 @@
-"""In-memory loader for the core cloud simulator dataset."""
 
 from __future__ import annotations
 
@@ -69,10 +68,7 @@ def _validate_dataset(frame: pd.DataFrame) -> None:
 
 
 def _freeze_dataframe(frame: pd.DataFrame) -> None:
-    """Mark underlying column arrays as read-only to prevent accidental mutation."""
-    # NOTE: allows_duplicate_labels=False removed — pandas propagates this flag to every
-    # .iloc slice result via __finalize__, causing DuplicateLabelError on random samples.
-    # Block-level writeable=False is sufficient to guard against accidental mutation.
+   
     for block in frame._mgr.blocks:
         block.values.flags.writeable = False
 
@@ -105,7 +101,7 @@ def load_dataset() -> pd.DataFrame:
 
         _validate_dataset(frame)
         frame = frame.reindex(columns=REQUIRED_COLUMNS, copy=False)
-        frame = frame.reset_index(drop=True)  # Ensure unique integer index to prevent DuplicateLabelError on iloc sampling
+        frame = frame.reset_index(drop=True) 
         _freeze_dataframe(frame)
         _dataset = frame
 
@@ -121,14 +117,12 @@ def load_dataset() -> pd.DataFrame:
 
 
 def get_dataset() -> pd.DataFrame:
-    """Return the cached simulator dataset without touching the filesystem."""
     if _dataset is None:
         raise RuntimeError('Dataset has not been loaded. Call load_dataset() during app startup.')
     return _dataset
 
 
 def dataset_info() -> dict:
-    """Return basic health information for the cached dataset."""
     frame = get_dataset()
     return {
         'rows': int(len(frame)),
