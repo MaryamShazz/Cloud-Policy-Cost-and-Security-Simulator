@@ -217,7 +217,6 @@ def evaluate_alert_rules_for_threat(threat: ThreatDetection, acting_user_id: int
                 'action_status': action_metadata.get('status'),
             },
         )
-
         matches.append({
             'rule_id': rule.id,
             'rule_name': rule.name,
