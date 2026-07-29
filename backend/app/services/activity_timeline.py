@@ -1,29 +1,16 @@
-"""Operational Activity Timeline - Persistent learning history tracker.
-
-Tracks user actions, scaling events, security incidents, cost optimizations,
-and lab milestones for the learning timeline.
-"""
-
 from datetime import datetime
 from typing import Any
 
 from app import db
-
-
 class ActivityTimeline:
-    """Tracks operational learning history per user/org."""
-
-    @staticmethod
+     @staticmethod
     def record_activity(user_id: int, org_id: int, activity_type: str,
                     details: dict[str, Any] | None = None) -> dict:
-        """Record an activity in the timeline."""
         from app.models.audit import AuditLog
 
         try:
             action = activity_type.replace('_', ' ').title()
-
-            # Create audit log entry as persistent record
-            audit = AuditLog(
+         audit = AuditLog(
                 organization_id=org_id,
                 user_id=user_id,
                 action=action,
@@ -48,11 +35,9 @@ class ActivityTimeline:
                 'recorded': False,
                 'error': str(e),
             }
-
     @staticmethod
     def get_recent_activities(org_id: int, limit: int = 20) -> list[dict]:
-        """Get recent activities for an organization."""
-        from app.models.audit import AuditLog
+         from app.models.audit import AuditLog
 
         try:
             activities = (
@@ -62,7 +47,6 @@ class ActivityTimeline:
                 .limit(limit)
                 .all()
             )
-
             return [
                 {
                     'id': a.id,
@@ -78,20 +62,17 @@ class ActivityTimeline:
 
     @staticmethod
     def get_learning_milestones(org_id: int) -> list[dict]:
-        """Get learning milestones based on activity history."""
         from app.models.resources import VirtualMachine, Database
         from app.models.progress import UserProgress
 
         milestones = []
 
         try:
-            # Count VMs created
             vm_count = VirtualMachine.query.filter_by(
                 organization_id=org_id
             ).filter(
                 VirtualMachine.status != 'terminated'
             ).count()
-
             if vm_count >= 1:
                 milestones.append({
                     'id': 'first_vm',
@@ -101,7 +82,6 @@ class ActivityTimeline:
                     'timestamp': None,
                 })
 
-            # Check security groups
             from app.models.resources import SecurityGroup
             sg_count = SecurityGroup.query.filter_by(org_id=org_id).count()
             if sg_count >= 1:
@@ -112,8 +92,7 @@ class ActivityTimeline:
                     'completed': True,
                 })
 
-            # Check budgets
-            from app.models.cost import Budget
+             from app.models.cost import Budget
             budget_count = Budget.query.filter_by(organization_id=org_id).count()
             if budget_count >= 1:
                 milestones.append({
@@ -126,7 +105,4 @@ class ActivityTimeline:
             return milestones
         except Exception:
             return milestones
-
-
-# Singleton
 activity_timeline = ActivityTimeline()
