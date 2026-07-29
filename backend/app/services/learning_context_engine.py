@@ -1,15 +1,6 @@
-"""Learning Context Engine - Generates contextual feedback for user actions.
-
-Provides KodeKloud/A Cloud Guru-style learning feedback after important
-user actions, explaining the cloud equivalent, cost impact, and
-operational significance.
-"""
-
 from dataclasses import dataclass
 from typing import Any
 
-
-# AWS/Azure equivalent mapping for instance types
 INSTANCE_EQUIVALENTS = {
     "t2.micro": {
         "aws": "t2.micro - General purpose (1 vCPU, 1GiB RAM)",
@@ -67,7 +58,6 @@ DATABASE_EQUIVALENTS = {
 
 @dataclass
 class LearningContext:
-    """Structured learning feedback for an action."""
     action: str
     title: str
     summary: str
@@ -77,16 +67,12 @@ class LearningContext:
     operational_meaning: str
     optimization_insight: str | None
     learning_explanation: str
-    severity: str = "info"  # info, warning, success
-
+    severity: str = "info" 
 
 class LearningContextService:
-    """Generates contextual learning feedback for platform actions."""
-
     @staticmethod
     def for_vm_created(instance_type: str, name: str, current_cost: float = 0,
                      total_vms: int = 0) -> LearningContext:
-        """Generate learning context for VM creation."""
         eq = INSTANCE_EQUIVALENTS.get(instance_type, INSTANCE_EQUIVALENTS["t2.micro"])
 
         cost_estimate = eq["monthly_cost_estimate"]
@@ -95,7 +81,6 @@ class LearningContextService:
             if total_vms > 3
             else "Your first few VMs are building foundational infrastructure skills."
         )
-
         optimization = None
         if total_vms > 5:
             optimization = (
@@ -125,7 +110,6 @@ class LearningContextService:
 
     @staticmethod
     def for_db_created(engine: str, name: str, current_cost: float = 0) -> LearningContext:
-        """Generate learning context for database creation."""
         eq = DATABASE_EQUIVALENTS.get(engine, DATABASE_EQUIVALENTS["PostgreSQL"])
 
         return LearningContext(
@@ -153,7 +137,6 @@ class LearningContextService:
     @staticmethod
     def for_vm_deleted(name: str, cost_saved: float = 0,
                      remaining_vms: int = 0) -> LearningContext:
-        """Generate learning context for VM deletion."""
         operational = (
             "Good cost management - stopping unused resources prevents bill shock."
             if remaining_vms == 0
@@ -184,7 +167,6 @@ class LearningContextService:
     @staticmethod
     def for_scaling_action(direction: str, current_count: int,
                           reason: str = "") -> LearningContext:
-        """Generate learning context for scaling actions."""
         if direction == "scale_up":
             title = "Scaled Out Compute Capacity"
             summary = f"Added capacity: {current_count} instance(s) now running"
@@ -257,7 +239,6 @@ class LearningContextService:
 
     @staticmethod
     def for_budget_created(amount: float, alert_threshold: float = 80) -> LearningContext:
-        """Generate learning context for budget creation."""
         alert_at = amount * (alert_threshold / 100)
 
         return LearningContext(
@@ -293,7 +274,6 @@ class LearningContextService:
         }
 
         title, _ = severity_styles.get(severity, ("Security Alert", "yellow"))
-
         return LearningContext(
             action="threat_detected",
             title=title,
@@ -320,7 +300,6 @@ class LearningContextService:
     @staticmethod
     def for_onboarding_step(step: str, total_steps: int,
                          completed: bool = True) -> LearningContext:
-        """Generate learning context for onboarding progression."""
         step_descriptions = {
             "first_vm": "Your first compute instance",
             "observe_cost": "Cost monitoring",
@@ -358,6 +337,4 @@ class LearningContextService:
             severity=severity,
         )
 
-
-# Singleton instance
 learning_context_service = LearningContextService()
