@@ -1,4 +1,3 @@
-"""Dataset-backed resource simulator for the cloud digital twin."""
 
 from __future__ import annotations
 
@@ -28,12 +27,7 @@ from app.models.security import (
     ThreatSeverity,
     ThreatType,
 )
-
-
 class ResourceSimulator:
-    """Simulate cloud resources using real dataset patterns and synthetic telemetry."""
-
-    # Instance specs: vcpu, ram (GB), baseline_cpu
     INSTANCE_PROFILES = {
         't2.micro':    {'vcpu': 1, 'ram': 1, 'baseline_cpu': 12.0},
         't2.small':    {'vcpu': 1, 'ram': 2, 'baseline_cpu': 18.0},
@@ -54,24 +48,17 @@ class ResourceSimulator:
         'g4dn.xlarge': {'vcpu': 4, 'ram': 16, 'baseline_cpu': 70.0},
     }
 
-    # Hard cap: max VMs processed per tick. Prevents the sim thread from
-    # monopolizing the GIL when the DB has thousands of autoscaled rows.
+   
     MAX_SIM_VMS: int = 12
-    # Hard global cap on autoscaled VMs
     MAX_VMS: int = 20
-    # Security analysis (ML model call) is expensive — run every N ticks only.
     _SECURITY_ANALYSIS_EVERY_N_TICKS: int = 24
 
     def __init__(self, tick_interval: int = 5, history_limit: int = 120, seed: int = 1337):
         self.tick_interval = tick_interval
-        # Module 4 Part G: explicit simulation time-step in seconds.
-        # Kept as an alias of tick_interval so downstream code can reference
-        # a self-documenting name; existing callers using tick_interval keep working.
         self.dt_seconds = tick_interval
         self.history_limit = history_limit
         self.seed = seed
-        # Runtime-owned RNGs make repeated simulator runs reproducible without
-        # mutating process-global random state used by Flask/tests.
+    
         self._rng = random.Random(seed)
         self._np_rng = np.random.default_rng(seed + 1)
         self.running = False
@@ -82,28 +69,17 @@ class ResourceSimulator:
         self._generator = None
         self._history_by_org = defaultdict(lambda: deque(maxlen=self.history_limit))
         self._activity_by_org = defaultdict(lambda: deque(maxlen=20))
-        # Per-VM metric history: vm_id → deque of {timestamp, cpu, memory}
         self.vm_metric_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=self.history_limit))
-        # Per-org aggregated metric history (separate from _history_by_org which includes cost)
         self.org_metric_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=self.history_limit))
         self._tick_count = 0
         self.last_scaled_at: dict[str, datetime] = {}
         self.waste_candidates: set[int] = set()
-        # Per-VM spike tracking: vm_id -> remaining spike cycles
         self._spike_cycles: dict[str, int] = {}
-        # Per-VM previous CPU (kept for control_plane smoothing, not used in sim)
         self._prev_cpu: dict[str, float] = {}
-        # Per-VM RPS history
         self.vm_rps_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=self.history_limit))
-        # Per-VM queue state: vm_instance_id -> pending work (ms)
-        # Kept for backward-compat with get_org_workload_snapshot; authoritative
-        # value is now VMDESSimulator.state.queue_ms — synced after each step().
         self._vm_queue: dict[str, float] = {}
-        # Per-VM cumulative dropped requests counter
         self._vm_dropped: dict[str, int] = {}
-        # Per-VM rolling latency samples — synced from DES after each step().
         self.vm_latency_samples: dict[str, deque] = defaultdict(lambda: deque(maxlen=200))
-        # DES engine per VM — Tasks 2-6: causal queue + emergent latency.
         self._vm_des: dict[str, VMDESSimulator] = {}
 
     def _get_generator(self) -> SyntheticDataGenerator:
@@ -116,15 +92,12 @@ class ResourceSimulator:
         with self._lock:
             if self.running:
                 return
-
             if app is None and has_app_context():
                 app = current_app._get_current_object()
-
             self._app = app
             if self._app is None:
                 print('Resource simulator not started: Flask app context unavailable')
                 return
-
             self.running = True
             self.stop_event.clear()
             self.thread = Thread(target=self._simulation_loop, daemon=True)
@@ -132,7 +105,6 @@ class ResourceSimulator:
             print('Resource simulator started')
 
     def stop(self):
-        """Stop the simulation loop."""
         with self._lock:
             self.running = False
             self.stop_event.set()
@@ -141,7 +113,6 @@ class ResourceSimulator:
             print('Resource simulator stopped')
 
     def _simulation_loop(self):
-        """Main simulation loop — daemon thread, never runs inside a Flask request."""
         if self._app is None:
             return
 
@@ -153,31 +124,21 @@ class ResourceSimulator:
                 except Exception as exc:  # pragma: no cover
                     db.session.rollback()
                     print(f'Simulation error: {exc}')
-
                 _tick_ms = round((time.monotonic() - tick_started) * 1000, 1)
                 if _tick_ms > 100:
                     print(f'[PERF] Simulation tick took {_tick_ms} ms')
-
-                # Throttle to a controlled cadence so the GIL is released and
-                # Flask request threads stay responsive.
                 elapsed = time.monotonic() - tick_started
                 target_cadence = max(0.75, min(1.25, self.tick_interval * 0.2))
                 sleep_for = max(0.05, target_cadence - elapsed)
                 self.stop_event.wait(sleep_for)
 
     def _update_resources(self):
-        """Update a capped subset of running resources with dataset-backed telemetry."""
-        # Release any pending transaction before starting so we don't hold a
-        # write lock across the entire tick while Flask request threads wait.
         db.session.commit()
         generator = self._get_generator()
         moment = datetime.utcnow()
         tick_started = time.monotonic()
 
-        # ── PERFORMANCE CAP ───────────────────────────────────────────────────
-        # Only simulate up to MAX_SIM_VMS VMs per tick. Extra VMs in the DB
-        # (old autoscale rows, test data) are skipped to keep ticks < 500 ms.
-        # We sort by id so we round-robin through all VMs across ticks.
+    
         _offset = (self._tick_count * self.MAX_SIM_VMS) % max(
             1, VirtualMachine.query.filter_by(status=ResourceStatus.RUNNING).count()
         )
@@ -195,7 +156,7 @@ class ResourceSimulator:
         for vm in vms:
             metrics = generator.generate_vm_metrics(vm, moment)
 
-            # ── Workload-driven CPU + memory + stochastic queueing ─────────────
+          
             (
                 rps, cpu, memory, overload,
                 queue_length, latency_ms, dropped,
@@ -207,17 +168,15 @@ class ResourceSimulator:
             metrics['memory_utilization'] = round(memory, 2)
             metrics['overload'] = overload
             metrics['requests_per_second'] = rps
-            metrics['queue_length'] = queue_length          # now in work-ms
+            metrics['queue_length'] = queue_length       
             metrics['latency_ms'] = latency_ms
             metrics['dropped_requests'] = dropped
             metrics['avg_service_time'] = avg_service_time
             metrics['p95_latency'] = p95_latency
             metrics['queue_delay'] = queue_delay
-            # Task 6: new extended metrics
             metrics['service_time_sample'] = service_time_sample
             metrics['latency_samples'] = list(self.vm_latency_samples[vm.instance_id])[-30:]
 
-            # Store per-VM RPS + queue history (extended)
             self.vm_rps_history[vm.instance_id].append({
                 'timestamp': moment.isoformat(),
                 'rps': rps,
@@ -231,8 +190,6 @@ class ResourceSimulator:
                 'service_time_sample': service_time_sample,
             })
 
-            # Module 4 Part H: publish event-driven updates for this VM.
-            # Uses a lazy import to avoid a module-load cycle with control_plane.
             try:
                 from app.services.event_bus import (
                     event_bus,
@@ -263,7 +220,7 @@ class ResourceSimulator:
                         'overload': overload,
                     },
                 )
-            except Exception:  # pragma: no cover - event bus must never break sim
+            except Exception: 
                 pass
 
             vm.cpu_utilization = metrics['cpu_utilization']
@@ -274,14 +231,12 @@ class ResourceSimulator:
             vm.network_out_mbps = metrics['network_out_mbps']
             vm.total_runtime_hours += self.tick_interval / 3600
             self._upsert_cost_record(vm, 'vm', moment, metrics)
-            # Security analysis is ML-heavy; run only every N ticks to stay fast.
+          
             if (
                 self._tick_count % self._SECURITY_ANALYSIS_EVERY_N_TICKS == 0
                 and (time.monotonic() - tick_started) < 0.08
             ):
                 self._analyze_vm_security(vm, moment)
-
-            # Store per-VM metric history point (extended)
             self.vm_metric_history[vm.instance_id].append({
                 'timestamp': moment.isoformat(),
                 'name': moment.strftime('%H:%M'),
@@ -292,9 +247,7 @@ class ResourceSimulator:
                 'disk_read': round(float(vm.disk_read_iops or 0), 2),
                 'disk_write': round(float(vm.disk_write_iops or 0), 2),
             })
-            # Yield GIL briefly after each VM so Flask threads can be scheduled.
             self.stop_event.wait(0.001)
-            # Commit every 10 VMs to keep transactions short.
             vm_count += 1
             if vm_count % 10 == 0:
                 db.session.commit()
@@ -310,7 +263,6 @@ class ResourceSimulator:
             database.total_runtime_hours += self.tick_interval / 3600
             self._upsert_cost_record(database, 'database', moment, metrics)
 
-        # Handle stopped VMs: cpu=0, memory=0
         stopped_vms = VirtualMachine.query.filter(
             VirtualMachine.status.in_([ResourceStatus.STOPPED, ResourceStatus.TERMINATED, ResourceStatus.FAILED])
         ).all()
@@ -321,21 +273,18 @@ class ResourceSimulator:
             vm.disk_write_iops = 0.0
             vm.network_in_mbps = 0.0
             vm.network_out_mbps = 0.0
-            # Clear spike, prev_cpu, queue, DES engine and latency samples
+       
             self._spike_cycles.pop(vm.instance_id, None)
             self._prev_cpu.pop(vm.instance_id, None)
             self._vm_queue.pop(vm.instance_id, None)
             self._vm_dropped.pop(vm.instance_id, None)
             self.vm_latency_samples.pop(vm.instance_id, None)
-            # Reset DES engine so it starts fresh if VM restarts
+          
             des = self._vm_des.pop(vm.instance_id, None)
             if des:
                 des.reset()
-
         db.session.commit()
 
-        # Emit resource_update events for each org with running resources
-        # Query DB for current states to ensure consistency
         org_ids = {vm.organization_id for vm in vms} | {database.organization_id for database in dbs}
         total_vms_by_org = {}
         running_vms_by_org = {}
@@ -364,7 +313,6 @@ class ResourceSimulator:
                 .group_by(VirtualMachine.organization_id)
                 .all()
             )
-
         for org_id in org_ids:
             org_vms = [v for v in vms if v.organization_id == org_id]
             org_dbs = [d for d in dbs if d.organization_id == org_id]
@@ -376,7 +324,6 @@ class ResourceSimulator:
             else:
                 cpu_avg = 0.0
                 memory_avg = 0.0
-            
             socketio.emit(
                 'resource_update',
                 {
@@ -388,9 +335,7 @@ class ResourceSimulator:
                 room=f'org_{org_id}',
                 namespace='/metrics'
             )
-
         self._tick_count += 1
-        # Store per-org aggregated metric history point
         org_ids = {vm.organization_id for vm in vms} | {database.organization_id for database in dbs}
         for org_id in org_ids:
             org_vms = [v for v in vms if v.organization_id == org_id]
@@ -415,23 +360,18 @@ class ResourceSimulator:
                 moment=moment,
             )
 
-    # ── Queue model constants (work-ms) ──────────────────────────────────────
-    _QUEUE_THRESHOLD_MS = 1000.0   # 1s of backlog → overload flag
-    _MAX_QUEUE_MS = 5000.0         # 5s of backlog → requests dropped
-    _BASE_LATENCY_MS = 20.0        # minimum service latency (legacy)
-    # Legacy aliases (referenced by _workload_explanation_for_org)
+    _QUEUE_THRESHOLD_MS = 1000.0   
+    _MAX_QUEUE_MS = 5000.0       
+    _BASE_LATENCY_MS = 20.0      
     _QUEUE_THRESHOLD = _QUEUE_THRESHOLD_MS
     _MAX_QUEUE = _MAX_QUEUE_MS
 
-    # ── Task 1: Lognormal sigma per workload pattern ──────────────────────────
     _SERVICE_TIME_SIGMA = {
-        'steady':  0.15,  # tight distribution
-        'spiky':   0.45,  # still bursty, but not stress-test sharp
-        'diurnal': 0.3,   # moderate variance
+        'steady':  0.15, 
+        'spiky':   0.45, 
+        'diurnal': 0.3,   
     }
     _DEFAULT_SIGMA = 0.3
-
-    # ── Workload capacity table (max rps at 100% CPU) ────────────────────────
     RPS_CAPACITY = {
         't2.micro':   50,
         't2.small':  100,
@@ -441,9 +381,6 @@ class ResourceSimulator:
     }
     _DEFAULT_CAPACITY = 200
 
-    # ── Task 1: Baseline service time per instance type (ms per request) ──────
-    # service_time = 1000 / capacity  (ms to process one request at full speed)
-    # Stored explicitly so heavier instances serve requests faster.
     _BASE_SERVICE_TIME_MS = {
         't2.micro':    15.0,
         't2.small':     8.0,
@@ -452,10 +389,6 @@ class ResourceSimulator:
         't2.xlarge':    1.0,
     }
     _DEFAULT_SERVICE_TIME_MS = 5.0
-
-    # ── Task 2: Request cost variability per workload pattern ─────────────────
-    # Defines (light_pct, heavy_pct, light_multiplier, heavy_multiplier)
-    # light requests finish faster; heavy requests take longer.
     _REQUEST_MIX = {
         'steady':  {'light': 0.70, 'heavy': 0.30, 'light_factor': 0.65, 'heavy_factor': 2.0},
         'spiky':   {'light': 0.40, 'heavy': 0.60, 'light_factor': 0.60, 'heavy_factor': 2.0},
@@ -463,7 +396,6 @@ class ResourceSimulator:
     }
     _DEFAULT_MIX = {'light': 0.60, 'heavy': 0.40, 'light_factor': 0.65, 'heavy_factor': 2.0}
 
-    # ── Learning text per pattern ─────────────────────────────────────────────
     _WORKLOAD_LEARNING = {
         'steady': {
             'effect': 'Stable CPU with small random fluctuations',
@@ -481,18 +413,14 @@ class ResourceSimulator:
 
     @classmethod
     def _avg_service_time_ms(cls, instance_type, pattern):
-        """Task 1+2: Compute weighted avg service time (ms) from request cost mix."""
         base_st = cls._BASE_SERVICE_TIME_MS.get(instance_type or '', cls._DEFAULT_SERVICE_TIME_MS)
         mix = cls._REQUEST_MIX.get((pattern or 'steady').lower(), cls._DEFAULT_MIX)
         avg_st = base_st * (
             mix['light'] * mix['light_factor'] + mix['heavy'] * mix['heavy_factor']
         )
-        return avg_st  # ms per request
+        return avg_st  
 
     def _compute_workload_metrics(self, vm, moment):
-        """Return (effective_rps, cpu_pct, memory_pct, overload, queue_length,
-                   latency_ms, dropped, avg_service_time, p95_latency, queue_delay)
-        driven by VM workload model with service-time-aware queueing."""
         base_rps = int(vm.requests_per_second or 50)
         pattern = (vm.workload_pattern or 'steady').lower()
         instance_type = vm.instance_type or ''
@@ -500,11 +428,9 @@ class ResourceSimulator:
         profile = self.INSTANCE_PROFILES.get(instance_type, {'ram': 4})
         base_mem_pct = profile.get('ram', 4) * 5.0
 
-        # ── Pattern modulation ────────────────────────────────────────────────
         if pattern == 'steady':
             fluctuation = self._rng.uniform(-0.03, 0.03)
             effective_rps = max(1, int(base_rps * (1 + fluctuation)))
-
         elif pattern == 'spiky':
             spike_key = vm.instance_id
             if spike_key in self._spike_cycles:
@@ -520,8 +446,7 @@ class ResourceSimulator:
                     self._spike_cycles[spike_key] = 1
                 else:
                     effective_rps = max(1, int(base_rps * self._rng.uniform(0.97, 1.03)))
-
-        else:  # diurnal
+        else:  
             hour_frac = moment.hour + moment.minute / 60.0
             sinusoid = math.sin((hour_frac / 24.0 - 0.25) * 2 * math.pi)
             scale = 0.5 + 0.5 * sinusoid
@@ -529,36 +454,25 @@ class ResourceSimulator:
             scale = max(0.0, min(1.0, scale + noise))
             effective_rps = max(1, int(base_rps * (0.3 + 0.7 * scale)))
 
-        # ── Service time (mean) ──────────────────────────────────────────────────
         avg_st_ms = self._avg_service_time_ms(instance_type, pattern)
 
-        # ── Task 1: Stochastic per-tick service-time sample (lognormal) ───────
         sigma = self._SERVICE_TIME_SIGMA.get(pattern, self._DEFAULT_SIGMA)
-        # lognormal parameterised so that E[X] == avg_st_ms:
-        #   mu = ln(mean) - sigma^2 / 2
         mu = math.log(max(avg_st_ms, 0.1)) - (sigma ** 2) / 2.0
         service_time_sample = float(self._np_rng.lognormal(mean=mu, sigma=sigma))
-        # clamp to sane bounds (10x mean max)
         service_time_sample = max(0.1, min(avg_st_ms * 10.0, service_time_sample))
-
-        # ── DES: causal queue + emergent latency (Tasks 2, 3, 4, 5, 6) ─────────
-        # vcpu drives processing_rate = vcpu × (1000 / service_time_ms) [Task 5]
         cores = max(1, int(profile.get('vcpu', 1) or 1))
-        incoming_rate = float(effective_rps)  # retained for CPU calc below
+        incoming_rate = float(effective_rps) 
 
-        # Obtain (or create) the per-VM DES engine.
         if vm.instance_id not in self._vm_des:
             self._vm_des[vm.instance_id] = VMDESSimulator(vm.instance_id)
         des = self._vm_des[vm.instance_id]
 
-        # Bug #1+#3+#5 fix: step() now takes mean (→ processing_rate) and
-        # sample (→ incoming_work) separately. SERVICE_COMPLETE schedules
-        # before REQUEST_ARRIVAL inside step() so drain happens first.
+    
         des_out = des.step(
             dt_seconds=self.dt_seconds,
             rps=incoming_rate,
-            mean_service_time_ms=avg_st_ms,            # deterministic
-            sample_service_time_ms=service_time_sample,  # lognormal draw
+            mean_service_time_ms=avg_st_ms,         
+            sample_service_time_ms=service_time_sample,  
             vcpu=cores,
         )
 
@@ -568,22 +482,11 @@ class ResourceSimulator:
         queue_delay = des_out["queue_delay_ms"]
         dropped = des_out["dropped"]
 
-        # Sync shared-state dicts so get_org_workload_snapshot still works.
         self._vm_queue[vm.instance_id] = current_queue
-        # Bug #4 fix: _vm_dropped now stores LAST-TICK drops (rate-style),
-        # not cumulative. Cumulative is still tracked inside DES state for
-        # accounting and exposed separately via the workload snapshot.
         self._vm_dropped[vm.instance_id] = des.state.dropped_in_last_tick
-        # Point the deque alias at the DES's own history (zero-copy sync).
         self.vm_latency_samples[vm.instance_id] = des.state.latency_history
 
-        # ── Overload via ms-queue threshold ──────────────────────────────────
         overload = current_queue > self._QUEUE_THRESHOLD_MS
-
-        # ── CPU: derived from DES processing utilisation ──────────────────────
-        # processing_utilisation = incoming_work_ms / drain_capacity_ms
-        # This is causally correct: CPU reflects how much of the tick's
-        # processing capacity was consumed by arriving work.
         incoming_work_ms = incoming_rate * self.dt_seconds * service_time_sample
         drain_capacity_ms = des_out["processing_rate_ms_per_s"] * self.dt_seconds
         if drain_capacity_ms > 0:
@@ -591,8 +494,6 @@ class ResourceSimulator:
         else:
             cpu = 0.0
         cpu = round(max(0.0, min(100.0, cpu)), 2)
-
-        # ── Decoupled memory model ────────────────────────────────────────────
         workload_factor = min(8.0, (incoming_rate / max(1, capacity)) * 5.0)
         memory = base_mem_pct + (cpu * 0.35) + workload_factor + self._rng.gauss(0, 1.8)
         memory = round(max(0.0, min(100.0, memory)), 2)
@@ -863,15 +764,12 @@ class ResourceSimulator:
         ]
         cpu = round(float(np.mean(cpu_values)) if cpu_values else 0.0, 2)
         memory = round(float(np.mean(memory_values)) if memory_values else 0.0, 2)
-        # Use real org_metric_history if available (last 30 points)
         history = list(self.org_metric_history.get(org_id, []))
         if history:
             return [
                 {'name': pt['name'], 'cpu': pt['cpu'], 'memory': pt['memory']}
                 for pt in history[-30:]
             ]
-
-        # Cold-start fallback: synthesize 6 points with diurnal pattern + Gaussian noise
         series = []
         now = datetime.utcnow()
         for offset in range(6):
@@ -934,7 +832,6 @@ class ResourceSimulator:
             total_dropped += self._vm_dropped.get(vm.instance_id, 0)
             if self._vm_queue.get(vm.instance_id, 0.0) > self._QUEUE_THRESHOLD:
                 overloaded += 1
-        # Task 7: include queue buildup and latency impact explanation
         queue_explanation = {
             'total_queue_length': round(total_queue, 2),
             'total_dropped_requests': total_dropped,
@@ -954,11 +851,9 @@ class ResourceSimulator:
         }
 
     def get_dashboard_snapshot(self, org_id):
-        """Return chart and activity series for the dashboard."""
         history = list(self._history_by_org.get(org_id, []))
         if history:
             cost_trend = [{'name': item['name'], 'cost': round(item['cost'], 2)} for item in history[-12:]]
-            # Prefer real org_metric_history for utilization (finer-grained, diurnal-aware)
             metric_history = list(self.org_metric_history.get(org_id, []))
             if metric_history:
                 utilization_trend = [
@@ -986,24 +881,13 @@ class ResourceSimulator:
         }
 
     def get_vm_avg_latency(self, vm_id: str) -> float:
-        """Mean of the rolling latency-samples deque for a single VM (ms).
-
-        Returns 0.0 when no samples have been collected yet.
-        """
         samples = self.vm_latency_samples.get(vm_id)
         if not samples:
             return 0.0
-        # Deque is bounded (maxlen=200) so this O(n) sum is trivially cheap.
         return round(sum(samples) / len(samples), 2)
 
     def get_org_workload_snapshot(self, org_id: int) -> dict:
-        """Aggregate the sim's in-memory queue/latency state for a single org.
-
-        Aggregation is strictly over VMs currently tracked (those that have
-        ticked at least once). Safe for the control plane to call every tick.
-        """
-        # Snapshot the list of running VMs once so aggregation is consistent.
-        running_vms = (
+      running_vms = (
             VirtualMachine.query
             .filter(VirtualMachine.organization_id == org_id)
             .filter(VirtualMachine.status == ResourceStatus.RUNNING)
@@ -1032,8 +916,6 @@ class ResourceSimulator:
         for vm in running_vms:
             q = self._vm_queue.get(vm.instance_id, 0.0)
             queue_values.append(q)
-            # Avg latency from the rolling sample deque when available,
-            # fallback to the most recent single sample if cold.
             samples = self.vm_latency_samples.get(vm.instance_id)
             if samples:
                 latency_values.append(sum(samples) / len(samples))
@@ -1042,7 +924,6 @@ class ResourceSimulator:
             if q > self._QUEUE_THRESHOLD_MS:
                 overloaded += 1
             
-            # Aggregate effective RPS from history or base
             rps_history = self.vm_rps_history.get(vm.instance_id)
             if rps_history:
                 total_rps += rps_history[-1].get('rps', 0)
@@ -1054,15 +935,9 @@ class ResourceSimulator:
         latency_avg = (
             sum(latency_values) / len(latency_values) if latency_values else 0.0
         )
-        # Org-level p95 is the max of per-VM p95s (worst-VM view) so the alarm
-        # fires on the slowest instance rather than being diluted by the mean.
+      
         p95_latency = max(p95_values) if p95_values else 0.0
-
-        # Bug #5 fix: aggregate the DETERMINISTIC mean across VMs. The control
-        # plane uses this to compute target_bpi = SLO / mean_service_time;
-        # using the per-tick lognormal SAMPLE here would make the target
-        # oscillate on every tick and the autoscaler would chase its own tail.
-        mean_service_times: list[float] = [
+ mean_service_times: list[float] = [
             self._vm_des[vm.instance_id].state.last_mean_service_time_ms
             for vm in running_vms
             if vm.instance_id in self._vm_des
@@ -1071,11 +946,7 @@ class ResourceSimulator:
             sum(mean_service_times) / len(mean_service_times)
             if mean_service_times else 5.0
         )
-
-        # Bug #4 fix: expose BOTH cumulative drops (accounting) and the
-        # most-recent-tick drops (used as the ALARM signal so the system
-        # can recover from drops events instead of latching to ALARM).
-        dropped_recent_total = sum(
+    dropped_recent_total = sum(
             self._vm_des[vm.instance_id].state.dropped_in_last_tick
             for vm in running_vms
             if vm.instance_id in self._vm_des
@@ -1091,31 +962,19 @@ class ResourceSimulator:
             'queue_total_ms': round(queue_total, 2),
             'latency_avg_ms': round(latency_avg, 2),
             'p95_latency_ms': round(p95_latency, 2),
-            # Existing key kept for backward-compat (cumulative since boot).
             'dropped_requests_total': int(dropped_cumulative_total),
-            # New: per-evaluation rate-style counter — control plane uses this.
-            'dropped_recent_total': int(dropped_recent_total),
+           'dropped_recent_total': int(dropped_recent_total),
             'overloaded_vms': overloaded,
             'vm_count': len(running_vms),
             'requests_per_second': int(total_rps),
-            # Deterministic mean: feeds target_bpi (Bug #5 fix).
             'avg_service_time_ms': round(avg_service_time_ms, 3),
         }
 
     def get_vm_rps_history(self, vm_id: str, n: int = 60) -> list[dict]:
-        """Return last N entries of per-VM RPS history.
-
-        Each entry: ``{'timestamp': ISO, 'rps': int, 'overload': bool}``
-        """
-        history = list(self.vm_rps_history.get(vm_id, []))
+      history = list(self.vm_rps_history.get(vm_id, []))
         return history[-n:] if history else []
 
     def get_vm_metrics_history(self, vm_id: str, minutes: int = 60) -> list[dict]:
-        """Return per-VM metric history for the last *minutes* minutes.
-
-        Each entry: ``{'timestamp': ISO, 'name': 'HH:MM', 'cpu': float, 'memory': float,
-                        'network_in': float, 'network_out': float}``
-        """
         history = list(self.vm_metric_history.get(vm_id, []))
         if not history:
             return []
