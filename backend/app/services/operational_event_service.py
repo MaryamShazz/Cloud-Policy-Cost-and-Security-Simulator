@@ -1,17 +1,9 @@
-"""Operational Event Service - Persistent operational event timeline.
-
-Tracks real operational events chronologically using AuditLog.
-Events persist independently of resource state.
-"""
-
 from datetime import datetime
 from typing import Any
 
 from app import db
 from app.models.governance import AuditLog
 
-
-# Event types for learning timeline
 OPERATIONAL_EVENTS = {
     'vm_created': {
         'category': 'compute',
@@ -170,11 +162,8 @@ OPERATIONAL_EVENTS = {
     },
 }
 
-
 class OperationalEventService:
-    """Persistent operational event tracking."""
-
-    @staticmethod
+     @staticmethod
     def record_event(
         user_id: int,
         org_id: int,
@@ -183,7 +172,6 @@ class OperationalEventService:
         resource_id: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> int | None:
-        """Record a persistent operational event."""
         event_config = OPERATIONAL_EVENTS.get(event_type, {})
 
         try:
@@ -198,7 +186,6 @@ class OperationalEventService:
             )
             db.session.add(audit)
             db.session.commit()
-
             return audit.id
         except Exception as e:
             db.session.rollback()
@@ -210,12 +197,10 @@ class OperationalEventService:
         limit: int = 50,
         category: str | None = None,
     ) -> list[dict]:
-        """Get chronological operational timeline events."""
-        try:
+       try:
             query = AuditLog.query.filter_by(organization_id=org_id)
 
             if category:
-                # Filter by category by looking up event types
                 category_types = [
                     k for k, v in OPERATIONAL_EVENTS.items()
                     if v.get('category') == category
@@ -228,7 +213,6 @@ class OperationalEventService:
                 .limit(limit)
                 .all()
             )
-
             events = list(reversed(events))
 
             timeline = []
@@ -246,7 +230,6 @@ class OperationalEventService:
                     'details': event.new_values or {},
                     'user_id': event.user_id,
                 })
-
             return timeline
         except Exception:
             return []
@@ -257,7 +240,6 @@ class OperationalEventService:
         category: str,
         limit: int = 10,
     ) -> list[dict]:
-        """Get recent events by category."""
         category_types = [
             k for k, v in OPERATIONAL_EVENTS.items()
             if v.get('category') == category
@@ -265,8 +247,7 @@ class OperationalEventService:
 
         if not category_types:
             return []
-
-        try:
+  try:
             events = (
                 AuditLog.query
                 .filter_by(organization_id=org_id)
@@ -275,7 +256,6 @@ class OperationalEventService:
                 .limit(limit)
                 .all()
             )
-
             return [
                 {
                     'id': e.id,
@@ -290,27 +270,22 @@ class OperationalEventService:
 
     @staticmethod
     def get_scaling_events(org_id: int, limit: int = 20) -> list[dict]:
-        """Get scaling-related events."""
-        return OperationalEventService.get_recent_by_category(org_id, 'scaling', limit)
+       return OperationalEventService.get_recent_by_category(org_id, 'scaling', limit)
 
     @staticmethod
     def get_security_events(org_id: int, limit: int = 20) -> list[dict]:
-        """Get security-related events."""
-        return OperationalEventService.get_recent_by_category(org_id, 'security', limit)
+         return OperationalEventService.get_recent_by_category(org_id, 'security', limit)
 
     @staticmethod
     def get_cost_events(org_id: int, limit: int = 20) -> list[dict]:
-        """Get cost-related events."""
-        return OperationalEventService.get_recent_by_category(org_id, 'cost', limit)
+       return OperationalEventService.get_recent_by_category(org_id, 'cost', limit)
 
     @staticmethod
     def get_learning_events(org_id: int, limit: int = 20) -> list[dict]:
-        """Get learning-lab events."""
         return OperationalEventService.get_recent_by_category(org_id, 'learning', limit)
 
     @staticmethod
     def get_event_counts(org_id: int) -> dict:
-        """Get event counts by category."""
         counts = {
             'total': 0,
             'compute': 0,
@@ -342,6 +317,4 @@ class OperationalEventService:
 
         return counts
 
-
-# Singleton
 operational_event_service = OperationalEventService()
