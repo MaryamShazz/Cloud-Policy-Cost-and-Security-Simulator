@@ -1,11 +1,3 @@
-"""scenario_runner.py — Scenario run coordinator.
-
-The CloudSim-style per-org simulation loop has been removed.
-Real simulation runs continuously via des_engine + resource_simulator.
-ScenarioRunner now acknowledges scenario starts and provides state for
-the frontend run status poll.  Workload patterns are informational only;
-the MAPE loop in control_plane.py handles autoscaling based on live load.
-"""
 from __future__ import annotations
 
 import logging
@@ -30,24 +22,19 @@ _DEFAULT_PATTERN = [{"rps": 100, "ticks": 10, "label": "Default"}]
 
 _active_runs: Dict[int, dict] = {}
 
-
 def _expand_pattern(pattern: List[Dict]) -> List[int]:
     result: List[int] = []
     for seg in pattern:
         result.extend([seg["rps"]] * seg["ticks"])
     return result
 
-
 class ScenarioRunner:
-    """Coordinates scenario run state; real simulation is in des_engine + control_plane."""
-
     def start(self, scenario_id: int, org_id: int) -> dict:
         if _active_runs.get(org_id, {}).get('is_running'):
             return {"ok": False, "error": "A scenario is already running.", "code": "scenario_already_running"}
 
         pattern = SCENARIO_WORKLOAD_PATTERNS.get(scenario_id, _DEFAULT_PATTERN)
         rps_sequence = _expand_pattern(pattern)
-
         _active_runs[org_id] = {
             'is_running': True,
             'scenario_id': scenario_id,
@@ -86,6 +73,4 @@ class ScenarioRunner:
             'dropped_requests': 0,
             'vm_count': 0,
         })
-
-
 scenario_runner = ScenarioRunner()
