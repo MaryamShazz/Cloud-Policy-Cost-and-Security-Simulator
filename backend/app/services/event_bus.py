@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
+
 EVENT_WORKLOAD_UPDATE = "workload_update"
 EVENT_METRIC_UPDATE = "metric_update"
 EVENT_SCALING_DECISION = "scaling_decision"
