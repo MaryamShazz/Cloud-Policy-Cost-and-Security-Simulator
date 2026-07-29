@@ -1,13 +1,9 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
-
 from flask import current_app
-
 from app import db
 from app.models.security import AlertRule, SecurityLog, ThreatDetection, ThreatSeverity
 from app.services.operational_event_service import OperationalEventService
-
 
 SUPPORTED_CONDITION_FIELDS = {'severity', 'threat_type', 'confidence_score'}
 SUPPORTED_OPERATORS = {'equals', 'contains', 'greater_than', 'less_than'}
@@ -17,8 +13,6 @@ SUPPORTED_ACTIONS = {'IN_APP_NOTIFY', 'EMAIL_NOTIFY', 'ISOLATE_RESOURCE', 'BLOCK
 @dataclass
 class AlertRuleValidationError(Exception):
     message: str
-
-
 def _normalize_condition_value(field: str, value) -> str:
     if value is None or str(value).strip() == '':
         raise AlertRuleValidationError('Condition value is required')
@@ -31,9 +25,7 @@ def _normalize_condition_value(field: str, value) -> str:
 
         if numeric_value < 0 or numeric_value > 1:
             raise AlertRuleValidationError('Confidence score must be between 0 and 1')
-
         return str(numeric_value)
-
     return str(value).strip()
 
 
@@ -177,12 +169,10 @@ def evaluate_alert_rules_for_threat(threat: ThreatDetection, acting_user_id: int
         .order_by(AlertRule.id.asc())
         .all()
     )
-
     matches: list[dict] = []
     for rule in matching_rules:
         if not evaluate_rule_match(rule, threat):
             continue
-
         rule.trigger_count = (rule.trigger_count or 0) + 1
         action_metadata = _build_action_metadata(rule, threat)
         log_payload = {
@@ -215,7 +205,6 @@ def evaluate_alert_rules_for_threat(threat: ThreatDetection, acting_user_id: int
                 raw_data=log_payload,
             )
         )
-
         OperationalEventService.record_event(
             user_id=acting_user_id or 0,
             org_id=threat.organization_id,
@@ -236,5 +225,4 @@ def evaluate_alert_rules_for_threat(threat: ThreatDetection, acting_user_id: int
             'action_status': action_metadata.get('status'),
             'action_result': action_metadata.get('result'),
         })
-
     return matches
