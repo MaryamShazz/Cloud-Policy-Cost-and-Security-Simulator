@@ -9,8 +9,6 @@ from app.models.resources import Database, VirtualMachine
 
 
 class GovernanceEngine:
-    """Backend-owned deterministic governance compiler and evaluator."""
-
     @staticmethod
     def compile_policy_text(policy_text: str) -> dict:
         return policy_engine.parse_policy(policy_text)
@@ -167,6 +165,4 @@ class GovernanceEngine:
             compliance_relevant=True,
         )
         db.session.add(audit)
-
-
 governance_engine = GovernanceEngine()
