@@ -1,11 +1,3 @@
-"""Rule-based operational insight generation for org snapshots.
-
-The engine is deliberately deterministic and snapshot-driven. It does not
-call any ML or LLM services. Each generated insight is derived from the
-current OrgSnapshot payload and deduplicated by a stable signature so the
-dashboard can display lightweight, actionable guidance without noise.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,8 +9,6 @@ _SEVERITY_ORDER = {"info": 0, "warning": 1, "critical": 2}
 
 @dataclass(frozen=True)
 class OperationalInsight:
-    """Single dashboard insight with a stable identity."""
-
     key: str
     category: str
     severity: str
@@ -45,8 +35,6 @@ class OperationalInsight:
 
 
 class OperationalInsightsEngine:
-    """Deterministic rule engine for dashboard operational insights."""
-
     CPU_WARNING = 75.0
     CPU_CRITICAL = 90.0
     QUEUE_WARNING_MS = 1000.0
@@ -61,9 +49,7 @@ class OperationalInsightsEngine:
     BUDGET_CRITICAL = 100.0
 
     def generate(self, snapshot: dict[str, Any], *, org_id: int | None = None) -> dict[str, Any]:
-        """Generate a deduplicated insight feed from a single OrgSnapshot."""
-
-        insights: list[OperationalInsight] = []
+       insights: list[OperationalInsight] = []
         insights.extend(self._cpu_pressure(snapshot))
         insights.extend(self._scaling_pressure(snapshot))
         insights.extend(self._topology_pressure(snapshot))
@@ -186,7 +172,6 @@ class OperationalInsightsEngine:
 
         if overloaded_hosts == 0 and imbalance < 35.0:
             return []
-
         severity = "critical" if overloaded_hosts >= 2 or max_cpu >= 95.0 else "warning"
         message = (
             f"Topology is imbalanced: {overloaded_hosts} host(s) are overloaded and CPU spread is {imbalance:.1f} points."
@@ -298,7 +283,6 @@ class OperationalInsightsEngine:
 
         if queue_total_ms < self.QUEUE_WARNING_MS and p95_latency_ms < self.QUEUE_WARNING_MS:
             return []
-
         severity = "critical" if queue_total_ms >= self.QUEUE_CRITICAL_MS or p95_latency_ms >= self.QUEUE_CRITICAL_MS else "warning"
         message = f"Queue depth is {queue_total_ms:.0f}ms and p95 latency is {p95_latency_ms:.0f}ms."
         actions = [
@@ -314,6 +298,5 @@ class OperationalInsightsEngine:
             recommended_actions=tuple(actions),
             signal_value=round(queue_total_ms, 2),
         )]
-
 
 operational_insights_engine = OperationalInsightsEngine()
