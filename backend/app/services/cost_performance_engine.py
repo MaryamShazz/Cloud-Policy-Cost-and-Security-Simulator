@@ -1,28 +1,16 @@
-"""Deterministic cost and performance optimization logic.
-
-The engine is snapshot-driven and org-scoped. It reads live resource state
-from the database, correlates utilization with spend, and emits optimization
-recommendations without relying on any AI or external billing integration.
-"""
-
 from __future__ import annotations
 
 import math
 from statistics import median
 from typing import Any
-
 from app.config import Config
 from app.models.resources import Database, ResourceStatus, VirtualMachine
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
-
-
 def _composite_utilization(cpu: float, memory: float) -> float:
     return _clamp((cpu * 0.65) + (memory * 0.35))
-
-
 def _pearson_correlation(values_a: list[float], values_b: list[float]) -> float:
     if len(values_a) < 2 or len(values_b) < 2 or len(values_a) != len(values_b):
         return 0.0
@@ -42,8 +30,6 @@ def _pricing_table(resource_kind: str) -> list[tuple[str, float]]:
     if resource_kind == "vm":
         return sorted(Config.VM_PRICING.items(), key=lambda item: item[1])
     return sorted(Config.DB_PRICING.items(), key=lambda item: item[1])
-
-
 def _suggest_cheaper_tier(resource_kind: str, current_type: str, current_rate: float) -> dict[str, Any] | None:
     pricing = _pricing_table(resource_kind)
     cheaper = [item for item in pricing if item[1] < current_rate]
@@ -62,8 +48,6 @@ def _suggest_cheaper_tier(resource_kind: str, current_type: str, current_rate: f
         "savings_rate_delta": round(current_rate - suggested_rate, 4),
         "current_type": current_type,
     }
-
-
 def _resource_efficiency(utilization_pct: float, hourly_rate: float, avg_hourly_rate: float) -> float:
     rate_ratio = hourly_rate / avg_hourly_rate if avg_hourly_rate > 0 else 1.0
     penalty = max(0.5, rate_ratio)
@@ -75,8 +59,6 @@ def _monthly_savings(rate_delta: float) -> float:
 
 
 def analyze_cost_performance(org_id: int, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Generate efficiency metrics and optimization recommendations."""
-
     snapshot = snapshot or {}
 
     vms = (
@@ -91,7 +73,6 @@ def analyze_cost_performance(org_id: int, snapshot: dict[str, Any] | None = None
         .filter(Database.status != ResourceStatus.TERMINATED)
         .all()
     )
-
     resources: list[dict[str, Any]] = []
     for vm in vms:
         cpu = float(vm.cpu_utilization or 0.0)
@@ -113,7 +94,6 @@ def analyze_cost_performance(org_id: int, snapshot: dict[str, Any] | None = None
                 "current_cost": round(current_cost, 4),
             }
         )
-
     for database in databases:
         cpu = float(database.cpu_utilization or 0.0)
         memory = min(100.0, max(0.0, cpu * 1.35 + float(database.database_connections or 0) * 0.65))
