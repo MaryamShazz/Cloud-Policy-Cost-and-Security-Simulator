@@ -1,10 +1,3 @@
-"""Module 3 — MAPE control plane for organization resource snapshots.
-
-Monitor → Analyze → Plan → Execute loop over the in-memory simulation state
-exposed by `resource_simulator`. Extends (never removes) existing response
-keys so the frontend continues to work unchanged.
-"""
-
 import calendar
 import math
 import threading
@@ -14,31 +7,23 @@ from datetime import datetime
 from app import db
 from app.models.resources import VirtualMachine, Database, ResourceStatus
 
-# ── Snapshot cache — updated by background thread, read by API ───────────────
 _snapshot_cache: dict[int, dict] = {}
 _cache_lock = threading.Lock()
-_cache_ttl = 2.0  # seconds between recomputes
+_cache_ttl = 2.0 
 _control_plane_task = None
 _control_plane_lock = threading.Lock()
 
-# In-memory storage for CPU history per organization (max 5 entries)
 cpu_history: dict[int, list] = {}
-
-# EMA smoothing parameters
 alpha = 0.3
 ema_cpu: dict[int, float] = {}
 ema_memory: dict[int, float] = {}
 
-# Alert state storage (CloudWatch-style state transitions)
-alert_states = {}  # org_id -> { alert_type: state }
-
-# Scaling state storage for cooldown and capacity control
-scaling_state = {}  # org_id -> { last_action_time, capacity }
+alert_states = {}  
+scaling_state = {} 
 
 
 def _empty_workload_snapshot() -> dict:
-    """Canonical zero-workload shape used when no simulator data exists."""
-    return {
+     return {
         'queue_avg_ms': 0.0,
         'queue_total_ms': 0.0,
         'latency_avg_ms': 0.0,
@@ -50,39 +35,30 @@ def _empty_workload_snapshot() -> dict:
         'requests_per_second': 0,
         'avg_service_time_ms': 5.0,
     }
-
-
 def _normalize_workload_snapshot(raw: dict | None) -> dict:
-    """Keep REST/socket snapshots schema-stable across cold and active runtime."""
-    normalized = _empty_workload_snapshot()
+     normalized = _empty_workload_snapshot()
     if isinstance(raw, dict):
         normalized.update({key: raw.get(key, value) for key, value in normalized.items()})
     return normalized
 
 
 def clear_snapshot_cache(org_id: int | None = None) -> None:
-    """Clear the cached org snapshot(s) used by the dashboard and timeline."""
     with _cache_lock:
         if org_id is None:
             _snapshot_cache.clear()
         else:
             _snapshot_cache.pop(org_id, None)
 
-# ── MAPE thresholds ─────────────────────────────────────────────────────────
-_QUEUE_ALARM_MS = 1000.0        # 1s of backlog → queue ALARM
-_LATENCY_P95_ALARM_MS = 500.0   # p95 SLO (ms) — also used for target BPI
+_QUEUE_ALARM_MS = 1000.0       
+_LATENCY_P95_ALARM_MS = 500.0  
 _LATENCY_P95_CRITICAL_MS = 1500.0
 _TARGET_UTIL_PCT = 60
 _SCALE_COOLDOWN_S = 15
 _CAPACITY_MIN = 1
 _CAPACITY_MAX = 10
-# Scale-in hysteresis: only scale in when BPI < target × (1 − SCALE_IN_TOLERANCE)
-_SCALE_IN_BPI_RATIO = 0.7       # AWS recommended: 70% of target triggers scale-in
-# Hard step cap: never add/remove more than this many instances per evaluation.
+_SCALE_IN_BPI_RATIO = 0.7      
 _MAX_STEP = 2
 _GLOBAL_MAX_VMS = 100
-
-# ── VM provisioning helpers for autoscaling execution ──────────────────────────
 
 _INSTANCE_SPECS = {
     "t2.micro":  {"vcpu": 1, "memory_gb": 1,  "baseline_cpu": 0.20, "baseline_memory": 0.30, "hourly_rate": 0.0116},
@@ -90,7 +66,6 @@ _INSTANCE_SPECS = {
     "t2.medium": {"vcpu": 2, "memory_gb": 4,  "baseline_cpu": 0.60, "baseline_memory": 0.70, "hourly_rate": 0.0464},
     "t2.large":  {"vcpu": 2, "memory_gb": 8,  "baseline_cpu": 0.75, "baseline_memory": 0.80, "hourly_rate": 0.0928},
 }
-
 
 def _next_autoscale_sequence(org_id: int) -> int:
     """Return a deterministic org-local autoscale sequence."""
@@ -104,7 +79,6 @@ def _next_autoscale_sequence(org_id: int) -> int:
 
 
 def _create_autoscale_vm(org_id: int, instance_type: str, base_rps: int, pattern: str) -> VirtualMachine:
-    """Create and commit a RUNNING VM for autoscaling execution."""
     from app.models.resources import Database
     current_vms = VirtualMachine.query.filter_by(organization_id=org_id).filter(VirtualMachine.status != ResourceStatus.TERMINATED).count()
     current_dbs = Database.query.filter_by(organization_id=org_id).filter(Database.status != ResourceStatus.TERMINATED).count()
@@ -139,8 +113,7 @@ def _create_autoscale_vm(org_id: int, instance_type: str, base_rps: int, pattern
 
 
 def _terminate_autoscale_vm(org_id: int) -> bool:
-    """Terminate one autoscale-created VM (lowest utilisation first). Returns True if a VM was terminated."""
-    candidates = (
+     candidates = (
         VirtualMachine.query
         .filter(VirtualMachine.organization_id == org_id)
         .filter(VirtualMachine.status == ResourceStatus.RUNNING)
@@ -154,8 +127,7 @@ def _terminate_autoscale_vm(org_id: int) -> bool:
     vm.status = ResourceStatus.TERMINATED
     vm.terminated_at = datetime.utcnow()
     db.session.commit()
-    # Remove from simulator in-memory state so it stops contributing to queue/latency.
-    try:
+     try:
         from flask import current_app
         sim = getattr(current_app, 'simulator', None)
         if sim and hasattr(sim, '_vm_des'):
@@ -171,14 +143,13 @@ def _terminate_autoscale_vm(org_id: int) -> bool:
 
 
 def _workload_snapshot_for(org_id: int) -> dict:
-    """Pull the simulator's per-org queue/latency aggregate. Safe on no-sim."""
-    try:
+   try:
         from app import simulation_engine
         state = simulation_engine.get_state(org_id)
         if state and state.get('is_running'):
             metrics = state.get('metrics', {})
             return _normalize_workload_snapshot({
-                'queue_total_ms': metrics.get('queue_depth', 0) * 10, # Mock scale for UI
+                'queue_total_ms': metrics.get('queue_depth', 0) * 10, 
                 'latency_avg_ms': metrics.get('latency_ms', 0),
                 'p95_latency_ms': metrics.get('latency_ms', 0) * 1.2,
                 'dropped_recent_total': state.get('dropped_requests', 0),
@@ -197,17 +168,14 @@ def _workload_snapshot_for(org_id: int) -> dict:
 
 
 def _topology_for(org_id: int) -> dict:
-    """Build the VM→Host→Datacenter view for Module 1 §5."""
     try:
         from app.services.infrastructure import aggregate_via_topology
         return aggregate_via_topology(org_id)
     except Exception:
         return {}
 
-
 def _security_for(org_id: int) -> dict:
-    """Build org security metrics from persisted threat state."""
-    try:
+     try:
         from app.models.security import ThreatDetection, ThreatSeverity
 
         threats = ThreatDetection.query.filter_by(organization_id=org_id, status='active').all()
@@ -237,8 +205,7 @@ def _security_for(org_id: int) -> dict:
 
 
 def _cost_for(org_id: int) -> dict:
-    """Build org cost metrics from persisted cost and budget state."""
-    try:
+     try:
         from app.models.cost import CostRecord, Budget
 
         today = datetime.utcnow().date()
@@ -292,7 +259,6 @@ def _cost_for(org_id: int) -> dict:
 
 
 def _governance_for(org_id: int) -> dict:
-    """Build org governance metrics from persisted policy state."""
     try:
         from app.models.governance import Policy, ComplianceCheck, PolicyStatus
 
@@ -309,7 +275,6 @@ def _governance_for(org_id: int) -> dict:
             compliance_score = int((passed_count / len(compliance_checks)) * 100)
         else:
             compliance_score = 100
-
         return {
             'policy_count': len(policies),
             'active_policy_count': len(active_policies),
@@ -337,7 +302,6 @@ def _governance_for(org_id: int) -> dict:
 
 
 def _runtime_for(org_id: int) -> dict:
-    """Build current simulation/runtime state for recovery-oriented views."""
     try:
         from app import simulation_engine
 
@@ -369,8 +333,7 @@ def _runtime_for(org_id: int) -> dict:
 
 
 def _telemetry_for(org_id: int) -> dict:
-    """Build dashboard telemetry series from the simulator when available."""
-    try:
+     try:
         from flask import current_app
 
         simulator = getattr(current_app, 'simulator', None)
@@ -394,7 +357,6 @@ def _telemetry_for(org_id: int) -> dict:
 
 
 def _operational_feed_for(org_id: int, snapshot: dict | None = None) -> dict:
-    """Build a compact cause → impact → recovery feed for the dashboard."""
     snapshot = snapshot or {}
     try:
         from app.services.event_bus import (
@@ -407,7 +369,6 @@ def _operational_feed_for(org_id: int, snapshot: dict | None = None) -> dict:
         recent_events = event_bus.recent(org_id, limit=15)
     except Exception:
         recent_events = []
-
     recent_events = sorted(recent_events, key=lambda item: item.get('timestamp') or 0)
 
     chains: list[dict] = []
@@ -422,7 +383,6 @@ def _operational_feed_for(org_id: int, snapshot: dict | None = None) -> dict:
             'summary': '',
             'events': [seed_event],
         }
-
     for event in recent_events:
         event_type = event.get('type')
         if event_type == EVENT_WORKLOAD_UPDATE:
@@ -500,12 +460,6 @@ def _operational_feed_for(org_id: int, snapshot: dict | None = None) -> dict:
 
 
 def get_org_snapshot(org_id: int, use_cache: bool = True) -> dict:
-    """Return the latest computed snapshot for an org.
-
-    By default reads from the in-memory cache (updated every ~2 s by the
-    background control-plane loop). Set use_cache=False to force a fresh
-    computation (used by the cache-refresh path itself).
-    """
     if use_cache:
         with _cache_lock:
             cached = _snapshot_cache.get(org_id)
@@ -539,48 +493,26 @@ def get_org_snapshot(org_id: int, use_cache: bool = True) -> dict:
 
 
 def _compute_org_snapshot(org_id: int) -> dict:
-    """Get current organization resource snapshot.
-    
-    Queries the database once for a consistent snapshot and computes metrics.
-    
-    Args:
-        org_id: Organization ID
-        
-    Returns:
-        Dict with keys:
-            - total_vms: Total non-terminated VMs
-            - running_vms: Total running VMs
-            - cpu_avg: Weighted average CPU utilization of running VMs (0-100)
-            - memory_avg: Average memory utilization of running VMs (0-100)
-    """
-    # Single DB query for all VMs in organization
+
     vms = VirtualMachine.query.filter_by(
         organization_id=org_id,
     ).filter(VirtualMachine.status != ResourceStatus.TERMINATED).all()
-    
-    # Compute total_vms from queried list
-    total_vms = len(vms)
-    
-    # Filter running VMs in memory (separate from valid_vms for accurate counting)
-    running_vms = [vm for vm in vms if vm.status == ResourceStatus.RUNNING]
+      total_vms = len(vms)
+   running_vms = [vm for vm in vms if vm.status == ResourceStatus.RUNNING]
     running_vms_count = len(running_vms)
     
-    # Filter VMs with valid metrics for aggregation (subset of running_vms)
     valid_vms = [
         vm for vm in running_vms
         if vm.cpu_utilization is not None and vm.memory_utilization is not None
     ]
     
-    # BPI defaults — overwritten in the valid_vms branch if simulation is active.
     bpi: float = 0.0
     target_bpi: float = 0.0
     avg_service_time_ms: float = 5.0
 
     current_hourly_cost = sum(float(vm.hourly_rate or 0) for vm in running_vms)
 
-    # Compute metrics only from valid VMs
     if valid_vms:
-        # Weight CPU by vcpu for realistic cross-instance-type averaging
         total_vcpu = sum(float(vm.vcpu or 1) for vm in valid_vms)
         if total_vcpu > 0:
             weighted_cpu_sum = sum(
@@ -591,41 +523,30 @@ def _compute_org_snapshot(org_id: int) -> dict:
         else:
             cpu_avg = 0.0
         
-        # Memory computed normally (unweighted)
         memory_avg = sum(float(vm.memory_utilization or 0) for vm in valid_vms) / len(valid_vms)
         
-        # Clamp values to 0-100 range
-        cpu_avg = max(0.0, min(100.0, cpu_avg))
+       cpu_avg = max(0.0, min(100.0, cpu_avg))
         memory_avg = max(0.0, min(100.0, memory_avg))
         
-        # EMA smoothing for CPU
         if org_id not in ema_cpu:
             ema_cpu[org_id] = cpu_avg
         else:
             ema_cpu[org_id] = (alpha * cpu_avg) + ((1 - alpha) * ema_cpu[org_id])
-        smoothed_cpu = ema_cpu[org_id]
-        
-        # Replace cpu_avg with smoothed for all downstream usage
+        smoothed_cpu = ema_cpu[org_id] 
         cpu_avg = smoothed_cpu
-        
-        # EMA smoothing for memory
-        if org_id not in ema_memory:
+         if org_id not in ema_memory:
             ema_memory[org_id] = memory_avg
         else:
             ema_memory[org_id] = (alpha * memory_avg) + ((1 - alpha) * ema_memory[org_id])
         smoothed_memory = ema_memory[org_id]
         
-        # Replace memory_avg with smoothed for all downstream usage
-        memory_avg = smoothed_memory
-        
-        # Initialize bottleneck variables
+          memory_avg = smoothed_memory
         raw_max_cpu = 0
         raw_max_memory = 0
         smoothed_max_cpu = 0
         smoothed_max_memory = 0
         
-        # Bottleneck detection (hybrid: raw max + smoothed average)
-        raw_max_cpu = max(float(vm.cpu_utilization or 0) for vm in valid_vms)
+         raw_max_cpu = max(float(vm.cpu_utilization or 0) for vm in valid_vms)
         raw_max_memory = max(float(vm.memory_utilization or 0) for vm in valid_vms)
         
         smoothed_max_cpu = (0.7 * raw_max_cpu) + (0.3 * smoothed_cpu)
@@ -637,7 +558,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
         max_cpu = raw_max_cpu
         max_memory = raw_max_memory
         
-        # System pressure assessment
         if cpu_bottleneck or memory_bottleneck:
             system_pressure = "high"
         elif smoothed_cpu > 70:
@@ -645,8 +565,7 @@ def _compute_org_snapshot(org_id: int) -> dict:
         else:
             system_pressure = "normal"
         
-        # Trend detection
-        history = cpu_history.get(org_id, [])
+         history = cpu_history.get(org_id, [])
 
         if len(history) < 4:
             cpu_trend = "stable"
@@ -664,23 +583,19 @@ def _compute_org_snapshot(org_id: int) -> dict:
             else:
                 cpu_trend = "stable"
         
-        # Update CPU history (keep max 5 entries) - use smoothed value
         history.append(smoothed_cpu)
         if len(history) > 5:
             history.pop(0)
         cpu_history[org_id] = history
         
-        # System risk assessment
         if cpu_trend == "increasing" and smoothed_cpu > 60:
             system_risk = "rising"
         else:
             system_risk = "normal"
         
-        # Alert engine with CloudWatch-style state transitions
         prev_states = alert_states.get(org_id, {}).copy()
         org_alerts = {}
         
-        # Define insufficient data conditions
         cpu_insufficient = (
             total_vms == 0
             or len(cpu_history.get(org_id, [])) < 3
@@ -690,7 +605,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
             or len(cpu_history.get(org_id, [])) < 3
         )
         
-        # CPU alert state
         if cpu_insufficient:
             cpu_state = "INSUFFICIENT_DATA"
         elif cpu_bottleneck:
@@ -699,7 +613,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
             cpu_state = "OK"
         org_alerts["cpu"] = cpu_state
         
-        # Memory alert state
         if memory_insufficient:
             memory_state = "INSUFFICIENT_DATA"
         elif memory_bottleneck:
@@ -708,7 +621,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
             memory_state = "OK"
         org_alerts["memory"] = memory_state
         
-        # Trend alert state
         if cpu_trend == "stable" and len(cpu_history.get(org_id, [])) < 3:
             trend_state = "INSUFFICIENT_DATA"
         elif system_risk == "rising":
@@ -717,8 +629,7 @@ def _compute_org_snapshot(org_id: int) -> dict:
             trend_state = "OK"
         org_alerts["trend"] = trend_state
         
-        # Track state transitions
-        transitions = []
+         transitions = []
         for key, new_state in org_alerts.items():
             old_state = prev_states.get(key)
             if old_state and old_state != new_state:
@@ -728,27 +639,17 @@ def _compute_org_snapshot(org_id: int) -> dict:
                     "to": new_state
                 })
         
-        # Save state
         alert_states[org_id] = org_alerts
         
-        # ── Module 3: MAPE — MONITOR (pull sim workload snapshot) ──────────────
         workload = _workload_snapshot_for(org_id)
         queue_total_ms = float(workload.get('queue_total_ms', 0.0) or 0.0)
         latency_avg_ms = float(workload.get('latency_avg_ms', 0.0) or 0.0)
         p95_latency_ms = float(workload.get('p95_latency_ms', 0.0) or 0.0)
-        # Bug #4 fix: ALARM logic uses RECENT drops (per evaluation cycle), not
-        # cumulative — otherwise drops_state stays ALARM forever and scale-in
-        # is permanently blocked. Cumulative remains for accounting only.
         dropped_recent = int(workload.get('dropped_recent_total', 0) or 0)
         dropped_total = int(workload.get('dropped_requests_total', 0) or 0)
         overloaded_vms = int(workload.get('overloaded_vms', 0) or 0)
-        # Bug #2 fix: BPI must use the actual instance count (vm_count), not
-        # the autoscaler's abstract capacity scalar — those diverge because the
-        # simulator does not actually launch new VMs when capacity bumps.
-        vm_count = int(workload.get('vm_count', 0) or 0)
+         vm_count = int(workload.get('vm_count', 0) or 0)
 
-        # ── Module 3: MAPE — ANALYZE (queue/latency/drops alerts) ───────────
-        # Queue alert: ALARM when backlog > 1s of work; INSUFFICIENT on cold sim.
         if workload.get('vm_count', 0) == 0:
             queue_state = "INSUFFICIENT_DATA"
         elif queue_total_ms > _QUEUE_ALARM_MS:
@@ -757,8 +658,7 @@ def _compute_org_snapshot(org_id: int) -> dict:
             queue_state = "OK"
         org_alerts["queue"] = queue_state
 
-        # Latency alert: ALARM when p95 breaches SLO.
-        if workload.get('vm_count', 0) == 0:
+         if workload.get('vm_count', 0) == 0:
             latency_state = "INSUFFICIENT_DATA"
         elif p95_latency_ms > _LATENCY_P95_ALARM_MS:
             latency_state = "ALARM"
@@ -766,12 +666,9 @@ def _compute_org_snapshot(org_id: int) -> dict:
             latency_state = "OK"
         org_alerts["latency"] = latency_state
 
-        # Drops alert: rate-style — any drops in the most recent tick.
-        # Bug #4 fix: was previously cumulative, which never recovered.
         drops_state = "ALARM" if dropped_recent > 0 else "OK"
         org_alerts["drops"] = drops_state
 
-        # Re-track transitions so the newly-added alert keys are included.
         transitions = []
         for key, new_state in org_alerts.items():
             old_state = prev_states.get(key)
@@ -779,72 +676,44 @@ def _compute_org_snapshot(org_id: int) -> dict:
                 transitions.append({"type": key, "from": old_state, "to": new_state})
         alert_states[org_id] = org_alerts
 
-        # ── MAPE — PLAN + EXECUTE (Task 1: AWS BPI target-tracking) ──────────
-        # Import DES helpers lazily to avoid module-load cycle.
         from app.services.des_engine import (
             compute_backlog_per_instance,
             compute_target_bpi,
             compute_desired_capacity,
         )
-
         state = scaling_state.get(org_id, {"last_action_time": 0, "capacity": max(1, vm_count)})
-        # Source of truth sync: align desired capacity with actual running VMs if user manually intervened
         if state["capacity"] != vm_count:
             state["capacity"] = max(1, vm_count)
             scaling_state[org_id] = state
 
         current_time = time.time()
-
-        # Retrieve org-level avg service time from the workload snapshot so
-        # target BPI uses the actual measured distribution, not a hard-coded
-        # constant. Falls back to 5 ms if the simulator hasn't reported yet.
-        avg_service_time_ms = float(workload.get("avg_service_time_ms", 5.0) or 5.0)
-
-        # PRIMARY SIGNAL: backlog-per-instance (AWS Target Tracking).
-        # Bug #2 fix: denominator is vm_count (instances actually doing work),
-        # not state["capacity"] (autoscaler's desired-count scalar). They
-        # diverge in this simulation because scale_up bumps the scalar but
-        # does not spawn real VMs — using the scalar would make BPI 'recover'
-        # without any real capacity change, defeating the AWS principle:
-        # "scaling metric MUST be proportional to capacity actually present".
-        # Fall back to capacity scalar only when no VMs are running.
-        instances_for_bpi = vm_count if vm_count > 0 else state["capacity"]
+       avg_service_time_ms = float(workload.get("avg_service_time_ms", 5.0) or 5.0)
+       instances_for_bpi = vm_count if vm_count > 0 else state["capacity"]
         bpi = compute_backlog_per_instance(
             queue_total_ms, avg_service_time_ms, instances_for_bpi
         )
 
-        # TARGET: how many requests of backlog can each instance hold and still
-        # drain within the latency SLO?
-        # target_bpi = SLO_ms / avg_service_time_ms
-        target_bpi = compute_target_bpi(_LATENCY_P95_ALARM_MS, avg_service_time_ms)
-
+         target_bpi = compute_target_bpi(_LATENCY_P95_ALARM_MS, avg_service_time_ms)
         if current_time - state["last_action_time"] < _SCALE_COOLDOWN_S:
-            # Cooldown gate: Execute phase allows only one action per cooldown.
-            actions = []
+           actions = []
         else:
             actions = []
             action_taken = False
 
-            # ── Debug: queue calculation ────────────────────────────────────────
             print(
                 f"[CONTROL_PLANE:AUTOSCALE] org={org_id} "
                 f"bpi={bpi:.2f} target_bpi={target_bpi:.2f} "
                 f"queue_total_ms={queue_total_ms:.1f} p95_latency={p95_latency_ms:.1f}ms "
                 f"vm_count={vm_count} capacity={state['capacity']}"
             )
-
             if bpi > target_bpi and state["capacity"] < _CAPACITY_MAX:
-                # SCALE OUT — proportional to overload.
-                # desired = ceil(backlog_requests / target_bpi)
-                # step = desired - current_capacity, clamped to [1, MAX_STEP].
-                desired = compute_desired_capacity(
+                 desired = compute_desired_capacity(
                     queue_total_ms, avg_service_time_ms, target_bpi
                 )
                 step = max(1, min(_MAX_STEP, desired - state["capacity"]))
                 new_capacity = min(_CAPACITY_MAX, state["capacity"] + step)
                 actual_step = new_capacity - state["capacity"]
 
-                # Execute: create actual VMs in the database.
                 created = 0
                 instance_type = running_vms[0].instance_type if running_vms else "t2.medium"
                 base_rps = 50
@@ -880,7 +749,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
                     })
                     state["last_action_time"] = current_time
                     action_taken = True
-
             elif (
                 bpi < target_bpi * _SCALE_IN_BPI_RATIO
                 and latency_state == "OK"
@@ -888,9 +756,7 @@ def _compute_org_snapshot(org_id: int) -> dict:
                 and system_risk != "rising"
                 and state["capacity"] > _CAPACITY_MIN
             ):
-                # SCALE IN — only when BPI is well below target AND no SLO breach.
-                # Execute: terminate one autoscale-created VM.
-                terminated = _terminate_autoscale_vm(org_id)
+                 terminated = _terminate_autoscale_vm(org_id)
                 if terminated:
                     state["capacity"] -= 1
                     reason = (
@@ -914,7 +780,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
                     state["last_action_time"] = current_time
                     action_taken = True
 
-            # Publish scaling_decision event for observability.
             if action_taken:
                 try:
                     from app.services.event_bus import event_bus, EVENT_SCALING_DECISION
@@ -937,7 +802,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
             running_vms_count = len(running_vms)
             current_hourly_cost = sum(float(vm.hourly_rate or 0) for vm in running_vms)
         
-        # Build learning explanation based on actions
         if actions:
             action_type = actions[0].get("type")
             _bpi_val = actions[0].get("bpi", 0)
@@ -986,7 +850,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
                 "system_thinking": "Thermostat steady — no scaling required",
             }
         
-        # Build alerts with state
         alerts = []
         
         if cpu_bottleneck:
@@ -1015,7 +878,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
         
         alert_count = len(alerts)
     elif running_vms:
-        # Running VMs exist but none have valid metrics
         cpu_avg = 0.0
         memory_avg = 0.0
         max_cpu = 0.0
@@ -1062,7 +924,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
             "system_thinking": "System idle"
         }
     
-    # Module 3/4: attach workload snapshot + topology without removing keys.
     workload_block = _workload_snapshot_for(org_id)
     topology_block = _topology_for(org_id)
     security_block = _security_for(org_id)
@@ -1101,20 +962,13 @@ def _compute_org_snapshot(org_id: int) -> dict:
         'actions': actions,
         'capacity': capacity,
         'learning_insight': learning_insight,
-        # BPI observability (Task 1) — let dashboard render the scaling signal
         'bpi': round(bpi, 2),
         'target_bpi': round(target_bpi, 2),
         'avg_service_time_ms': round(avg_service_time_ms, 3),
-        # Transparency (Bug #2 follow-up): expose both numbers so the user
-        # can see the divergence between desired (autoscaler) and running
-        # (simulator). In a real AWS deployment, the ASG reconciler would
-        # spawn EC2 instances to close the gap.
-        'desired_capacity': capacity,
+         'desired_capacity': capacity,
         'running_capacity': running_vms_count,
-        # Module 4 extensions
         'workload': workload_block,
-        # Module 1 extension
-        'topology': topology_block,
+       'topology': topology_block,
         'security': security_block,
         'costs': cost_block,
         'governance': governance_block,
@@ -1210,11 +1064,6 @@ def _compute_org_snapshot(org_id: int) -> dict:
 
 
 def run_control_plane_loop():
-    """Background task: refresh snapshot cache + emit real-time dashboard updates.
-
-    Runs every _cache_ttl seconds (2 s by default).  All API endpoints
-    read from _snapshot_cache so they never block on heavy computation.
-    """
     from app import socketio
     from app.models.organization import Organization
 
@@ -1234,18 +1083,14 @@ def run_control_plane_loop():
                     room=f"org_{org.id}",
                     namespace="/metrics"
                 )
-                # TASK 6: log per-org snapshot compute time
                 elapsed_ms = round((time.time() - snap_t0) * 1000, 1)
                 if elapsed_ms > 500:
                     print(f"[CONTROL_PLANE] org={org.id} snapshot took {elapsed_ms} ms — consider reducing VM count")
         except Exception:
             pass
-        # TASK 4: sleep between iterations — prevents busy-loop and CPU saturation
-        socketio.sleep(_cache_ttl)  # 2 s
-
+        socketio.sleep(_cache_ttl)  
 
 def start_control_plane_loop():
-    """Launch run_control_plane_loop as a SocketIO background task (idempotent)."""
     from app import socketio
     global _control_plane_task
     with _control_plane_lock:
