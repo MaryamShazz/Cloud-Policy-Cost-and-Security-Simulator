@@ -1,12 +1,9 @@
-"""Scenario-based learning engine for the cloud simulator."""
-
 from __future__ import annotations
 import subprocess
 import json
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Any
-
 import pandas as pd
 
 from app.data.scenarios import SCENARIOS
@@ -25,7 +22,6 @@ ROLE_LABELS = {
     "admin": "admin",
     "superadmin": "admin",
 }
-
 ROLE_SYSTEM = {
     "student": {
         "title": "Student",
@@ -61,7 +57,6 @@ PROGRESSION_PATH = [
     }
     for level in LEVELS
 ]
-
 TRACK_LIMITS = {
     "beginner": 1,
     "intermediate": 3,
@@ -74,16 +69,13 @@ TRACK_ALIASES = {
     "expert": "advanced",
 }
 
-
 def resolve_learning_role(user=None, membership=None) -> str:
-    """Map platform roles to the learning role requested by the product."""
     if getattr(user, "is_superadmin", False):
         return "admin"
     role = getattr(membership, "role", None) or getattr(membership, "my_role", None)
     if role in {"owner", "admin"}:
         return "organization"
     return "student"
-
 
 def normalize_learning_level(level: str | None) -> str:
     """Normalize level labels to the supported learning tracks."""
@@ -92,19 +84,13 @@ def normalize_learning_level(level: str | None) -> str:
     if normalized not in TRACK_LIMITS:
         return "beginner"
     return normalized
-
-
 def curriculum_limit(level: str | None) -> int:
-    """Return the maximum scenario index unlocked for a learning track."""
     return TRACK_LIMITS.get(normalize_learning_level(level), 1)
-
 
 def _scenario_id_list(limit: int) -> list[int]:
     return [scenario_id for scenario_id in CURRICULUM_SEQUENCE if scenario_id <= limit]
 
-
 def next_unlocked_scenario(progress=None, level: str | None = None) -> dict[str, Any] | None:
-    """Return the next scenario the learner can actually open."""
     limit = curriculum_limit(level)
     completed = set((getattr(progress, "scenarios_completed", None) or []))
     for scenario_id in _scenario_id_list(limit):
@@ -112,9 +98,7 @@ def next_unlocked_scenario(progress=None, level: str | None = None) -> dict[str,
             return SCENARIO_MAP.get(scenario_id)
     return SCENARIO_MAP.get(_scenario_id_list(limit)[-1]) if _scenario_id_list(limit) else None
 
-
 def scenario_unlock_state(progress=None, level: str | None = None) -> list[dict[str, Any]]:
-    """Return scenario unlock metadata for the frontend."""
     limit = curriculum_limit(level)
     completed = set(str(item) for item in (getattr(progress, "scenarios_completed", None) or []))
     unlocked_ids = _scenario_id_list(limit)
@@ -138,10 +122,8 @@ def scenario_unlock_state(progress=None, level: str | None = None) -> list[dict[
         })
     return states
 
-
 @lru_cache(maxsize=1)
 def dataset_workload_patterns() -> dict[str, Any]:
-    """Derive realistic workload patterns from the staged dataset."""
     try:
         frame = load_dataset()
     except Exception:
@@ -153,7 +135,6 @@ def dataset_workload_patterns() -> dict[str, Any]:
             "seasonal": {"peak_window": [], "off_peak_window": []},
             "failures": [],
         }
-
     cpu = pd.to_numeric(frame["cpu_avg"], errors="coerce").fillna(0)
     mem = pd.to_numeric(frame["mem_avg"], errors="coerce").fillna(0)
     time_axis = pd.to_numeric(frame["time"], errors="coerce").fillna(0)
@@ -189,12 +170,10 @@ def dataset_workload_patterns() -> dict[str, Any]:
 
 
 def role_profile(role: str) -> dict[str, Any]:
-    """Return a short role description for the learning UI."""
     return {
         "role": role,
         **ROLE_SYSTEM.get(role, ROLE_SYSTEM["student"]),
     }
-
 
 def current_level(total_points: int | None) -> dict[str, Any]:
     points = int(total_points or 0)
@@ -233,8 +212,7 @@ def level_options() -> list[dict[str, Any]]:
 
 
 def explain_metric_change(scenario: dict[str, Any], snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Return a short causal explanation for why the metrics changed."""
-    snapshot = snapshot or {}
+     snapshot = snapshot or {}
     cause_effect = scenario.get("cause_effect", {})
     loop = scenario.get("learning_loop", {})
     return {
@@ -259,15 +237,12 @@ def explain_metric_change(scenario: dict[str, Any], snapshot: dict[str, Any] | N
 
 
 def recommended_scenario(level_title: str | None = None, progress=None) -> dict[str, Any] | None:
-    """Pick the next scenario the learner should see for the selected track."""
     next_scenario = next_unlocked_scenario(progress=progress, level=level_title)
     if next_scenario:
         return next_scenario
     return SCENARIOS[0] if SCENARIOS else None
 
-
 def learning_loop_for_scenario(scenario: dict[str, Any], snapshot: dict[str, Any] | None = None, *, level: str | None = None, progress=None) -> dict[str, Any]:
-    """Return the learning loop: user → scenario → action → simulation → result → explanation."""
     snapshot = snapshot or {}
     loop = scenario.get("learning_loop", {})
     explanation = explain_metric_change(scenario, snapshot)
@@ -283,9 +258,7 @@ def learning_loop_for_scenario(scenario: dict[str, Any], snapshot: dict[str, Any
         "next_scenario": recommended_scenario(level, progress),
     }
 
-
 def build_learning_profile(user=None, membership=None, progress=None, snapshot=None, level: str | None = None) -> dict[str, Any]:
-    """Compose a scenario-based learning view for the dashboard and labs."""
     role = resolve_learning_role(user, membership)
     role_info = role_profile(role)
     progress_level = current_level(getattr(progress, "total_points", None) if progress else None)
@@ -323,8 +296,7 @@ def build_learning_profile(user=None, membership=None, progress=None, snapshot=N
 
 
 def _generate_gemini_insight(payload: dict) -> dict:
-    """Invoke Gemini CLI to get qualitative feedback."""
-    breakdown = payload.get("normalized_scores", {})
+   breakdown = payload.get("normalized_scores", {})
     weakest_metric = min(breakdown.keys(), key=lambda k: breakdown[k]) if breakdown else "latency"
 
     prompt = (
@@ -362,9 +334,7 @@ def _generate_gemini_insight(payload: dict) -> dict:
         }
 
     try:
-        # Use subprocess to call gemini CLI
         result = subprocess.check_output(["gemini", prompt], text=True, timeout=10)
-        # Attempt to parse JSON from output
         start_idx = result.find("{")
         end_idx = result.rfind("}") + 1
         if start_idx != -1 and end_idx != -1:
@@ -374,12 +344,9 @@ def _generate_gemini_insight(payload: dict) -> dict:
             action_text = actions[0] if actions else ""
             
             combined_text = (insight + " " + action_text).lower()
-            
-            # Rule 4: Discard and fallback if weakest metric is not referenced
+         
             if weakest_metric.lower() not in combined_text:
                 return deterministic_fallback()
-                
-            # Rule 3: Rule-based guards
             if breakdown.get("cost", 100) < 60 and "cost" not in combined_text:
                  return deterministic_fallback()
             if breakdown.get("latency", 100) < 60 and ("scal" not in combined_text and "performance" not in combined_text):
@@ -397,29 +364,25 @@ def _generate_gemini_insight(payload: dict) -> dict:
 
 
 def evaluate_scenario_decision(scenario: dict, snapshot: dict, include_ai: bool = False) -> dict:
-    """Calculate the decision score and generate feedback."""
-    scoring_profile = scenario.get("scoring_profile", {
+     scoring_profile = scenario.get("scoring_profile", {
         "wL": 0.25, "wC": 0.25, "wE": 0.25, "wR": 0.25,
         "target_latency_ms": 100.0,
         "budget": 10.0
     })
-
-    # Map snapshot to raw metrics expected by scorer
-    workload = snapshot.get("workload", {})
+   workload = snapshot.get("workload", {})
     
     rps = workload.get("requests_per_second", 0.0)
     capacity = snapshot.get("capacity", 1.0)
     dropped = workload.get("dropped_recent_total", 0)
     
-    # Idle system exploit fix: if scenario expects workload but system is down/idle
     if scenario.get("requires_load", True):
         if capacity == 0 or rps == 0:
-            dropped = max(1, dropped) # Force failure state
+            dropped = max(1, dropped) 
 
     raw_metrics = {
         "p95_latency": workload.get("p95_latency_ms", 0.0),
         "rps": rps,
-        "actual_cost": snapshot.get("current_hourly_cost", 0.0) * 720.0, # Projected monthly cost
+        "actual_cost": snapshot.get("current_hourly_cost", 0.0) * 720.0, 
         "cpu_avg": snapshot.get("cpu_avg", 0.0),
         "capacity": capacity,
         "dropped_requests": dropped,
@@ -431,7 +394,6 @@ def evaluate_scenario_decision(scenario: dict, snapshot: dict, include_ai: bool 
         "target_latency": scoring_profile.get("target_latency_ms", 100.0),
         "budget": scoring_profile.get("budget", 10.0)
     }
-
     report = DecisionScorer.calculate_score(raw_metrics, weights, constraints)
 
     if include_ai:
@@ -450,9 +412,7 @@ def evaluate_scenario_decision(scenario: dict, snapshot: dict, include_ai: bool 
                 _generate_gemini_insight(insight_payload)
             except Exception:
                 pass
-
-        # Non-blocking AI execution
-        threading.Thread(target=run_ai, daemon=True).start()
+    threading.Thread(target=run_ai, daemon=True).start()
         
         report.update({
             "insight": "AI feedback is being generated...",
@@ -471,9 +431,7 @@ def evaluate_scenario_decision(scenario: dict, snapshot: dict, include_ai: bool 
 
 @dataclass(frozen=True)
 class ValidationPredicate:
-    """Single deterministic predicate used by state-driven lab validation."""
-
-    field: str
+     field: str
     operator: str
     expected: Any
     source: str = 'snapshot'
@@ -502,9 +460,7 @@ class ValidationPredicate:
 
 
 class LabValidationEngine:
-    """State-driven validation engine for Lab 3 security progression only."""
-
-    LAB3_SCENARIO_ID = 3
+     LAB3_SCENARIO_ID = 3
     DEFAULT_SECURITY_TARGET = 90
     DEFAULT_COMPLIANCE_THRESHOLD = 80
 
@@ -653,6 +609,4 @@ class LabValidationEngine:
                 'predicates': predicate_results,
             },
         }
-
-
 lab_validation_engine = LabValidationEngine()
