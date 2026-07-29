@@ -39,7 +39,6 @@ THREAT_TYPE_MAP = {
     'suspicious_behavior': ThreatType.SUSPICIOUS_BEHAVIOR,
 }
 
-
 def _emit_security_updates(org_id, payload=None):
     socket_payload = {
         'organization_id': org_id,
@@ -59,7 +58,6 @@ def _emit_security_updates(org_id, payload=None):
         namespace='/metrics',
     )
 
-
 def _create_security_log(org_id, threat_type, severity, current_metrics, resource_id=None, description=None):
     log = SecurityLog(
         organization_id=org_id,
@@ -74,7 +72,6 @@ def _create_security_log(org_id, threat_type, severity, current_metrics, resourc
     db.session.add(log)
     return log
 
-
 def _get_org_membership(org_id, user_id):
     if org_id is None:
         return None
@@ -87,8 +84,7 @@ def _is_security_manager(member):
 
 
 def basic_threat_analysis(metrics):
-    """Fallback threat scoring for the P1 mid structure."""
-    requests_per_minute = metrics.get('requests_per_minute', 0)
+     requests_per_minute = metrics.get('requests_per_minute', 0)
     error_rate = metrics.get('error_rate', 0)
     avg_latency_ms = metrics.get('avg_latency_ms', 0)
     network_in = metrics.get('network_in_mbps', 0)
@@ -114,15 +110,12 @@ def basic_threat_analysis(metrics):
         'source': 'heuristic_fallback',
     }
 
-
 def resolve_threat_type(threat_name):
-    """Map string threat labels to ThreatType enum members safely."""
-    normalized = (threat_name or '').strip().lower()
+   normalized = (threat_name or '').strip().lower()
     return THREAT_TYPE_MAP.get(normalized, ThreatType.SUSPICIOUS_BEHAVIOR)
 
 
 def build_attack_scenario(attack_type, intensity='medium'):
-    """Build a realistic attack scenario without fabricating a training dataset."""
     attack_type = (attack_type or 'ddos').strip().lower()
     intensity = (intensity or 'medium').strip().lower()
 
@@ -185,12 +178,10 @@ def build_attack_scenario(attack_type, intensity='medium'):
 @security_bp.route('/alert-rules', methods=['GET'])
 @jwt_required()
 def list_alert_rules():
-    """List persisted alert rules for an organization."""
     user_id = get_jwt_identity()
     org_id = request.args.get('organization_id', type=int)
     if org_id is None:
         org_id = request.args.get('org_id', type=int)
-
     member = _get_org_membership(org_id, user_id)
     if not member:
         return jsonify({'error': 'Access denied'}), 403
@@ -201,7 +192,6 @@ def list_alert_rules():
         .order_by(AlertRule.created_at.desc(), AlertRule.id.desc())
         .all()
     )
-
     return jsonify({
         'data': {
             'alert_rules': [rule.to_dict() for rule in rules],
@@ -212,8 +202,7 @@ def list_alert_rules():
 @security_bp.route('/alert-rules', methods=['POST'])
 @jwt_required()
 def create_alert_rule():
-    """Create a new alert rule."""
-    user_id = get_jwt_identity()
+     user_id = get_jwt_identity()
     data = request.get_json() or {}
     org_id = data.get('organization_id') or data.get('org_id')
 
@@ -255,8 +244,7 @@ def create_alert_rule():
 @security_bp.route('/alert-rules/<int:rule_id>', methods=['PUT'])
 @jwt_required()
 def update_alert_rule(rule_id):
-    """Update an existing alert rule or toggle active state."""
-    user_id = get_jwt_identity()
+     user_id = get_jwt_identity()
     rule = AlertRule.query.get_or_404(rule_id)
     member = _get_org_membership(rule.organization_id, user_id)
     if not member:
@@ -304,7 +292,6 @@ def update_alert_rule(rule_id):
 @security_bp.route('/alert-rules/<int:rule_id>', methods=['DELETE'])
 @jwt_required()
 def delete_alert_rule(rule_id):
-    """Delete an alert rule."""
     user_id = get_jwt_identity()
     rule = AlertRule.query.get_or_404(rule_id)
     member = _get_org_membership(rule.organization_id, user_id)
@@ -397,7 +384,6 @@ def analyze_traffic():
     member = _get_org_membership(org_id, user_id)
     if not member:
         return jsonify({'error': 'Access denied'}), 403
-    # Simulate current metrics
     current_metrics = {
         'requests_per_minute': data.get('requests_per_minute', 1000),
         'avg_latency_ms': data.get('avg_latency_ms', 50),
@@ -413,12 +399,10 @@ def analyze_traffic():
         'network_out_mbps': data.get('network_out_mbps', 0),
         'auth_failures': data.get('auth_failures', 0),
     }
-    # Get prediction
-    if threat_detector:
+   if threat_detector:
         result = threat_detector.real_time_monitor(current_metrics)
     else:
         result = basic_threat_analysis(current_metrics)
-    # If threat detected, create record
     if result.get('is_threat'):
         primary_resource_id = data.get('resource_id')
         if primary_resource_id is None:
@@ -454,7 +438,6 @@ def analyze_traffic():
         result['triggered_rules'] = triggered_rules
         db.session.commit()
         _emit_security_updates(org_id, {'threat': threat.to_dict(), 'alert_rules_triggered': triggered_rules})
-        # Trigger remediation if auto-remediation enabled
         if data.get('auto_remediate'):
             from app.models.resources import VirtualMachine
             resource = VirtualMachine.query.filter_by(
@@ -469,7 +452,6 @@ def analyze_traffic():
                     },
                     resource.to_dict()
                 )
-                # Create remediation record
                 for action in remediation_result['results']:
                     rem = RemediationAction(
                         threat_id=threat.id,
@@ -537,8 +519,7 @@ def simulate_attack():
         else:
             pred = basic_threat_analysis(row)
         predictions.append(pred)
-    # Create threat record
-    threat = ThreatDetection(
+     threat = ThreatDetection(
         organization_id=org_id,
         threat_type=resolve_threat_type(attack_type),
         severity=ThreatSeverity.HIGH,
@@ -548,7 +529,7 @@ def simulate_attack():
         network_traffic_snapshot={'predictions': predictions[:5]},
         model_version='simulation',
         detection_pattern=f'Simulated {attack_type} scenario',
-        status='contained'  # Auto-contained in simulation
+        status='contained'
     )
     db.session.add(threat)
     db.session.add(
@@ -573,7 +554,6 @@ def simulate_attack():
     triggered_rules = evaluate_alert_rules_for_threat(threat, acting_user_id=user_id)
     db.session.commit()
 
-    # Emit socket event so Security.jsx table updates in real time
     _emit_security_updates(org_id, {'threat': threat.to_dict(), 'alert_rules_triggered': triggered_rules})
 
     return jsonify({
