@@ -1,20 +1,3 @@
-"""Module 1 — Infrastructure topology service.
-
-CloudSim-style Datacenter → Host → VM hierarchy, derived deterministically from
-existing VMs without altering DB schema. Safe, additive, O(N) per build.
-
-Design notes
-------------
-* Topology is derived on demand from running VMs in an organization.
-* Hosts are pooled per (organization, subnet). Each Host is a bin-packed
-  container of VMs whose combined vCPU and RAM fit the host's capacity.
-* Datacenters group hosts per organization. A single default datacenter is
-  created per org; larger orgs can later be split across datacenters without
-  breaking the contract returned by `build_topology`.
-
-No database changes are required; the derivation is deterministic, cached per
-simulator tick via an in-memory snapshot dict if desired by callers.
-"""
 
 from __future__ import annotations
 
@@ -23,25 +6,16 @@ from typing import Iterable
 
 from app.models.resources import ResourceStatus, VirtualMachine
 
-
-# ── Host capacity templates (bin-packing target size) ────────────────────────
-# Standard physical host sizes — tuned so that ~3–8 small VMs fit per host.
 _HOST_TEMPLATES = [
     {"name": "host-small",  "cpu_cores": 8,  "memory_gb": 32.0},
     {"name": "host-medium", "cpu_cores": 16, "memory_gb": 64.0},
     {"name": "host-large",  "cpu_cores": 32, "memory_gb": 128.0},
 ]
-_DEFAULT_HOST = _HOST_TEMPLATES[1]  # medium
-
+_DEFAULT_HOST = _HOST_TEMPLATES[1] 
 
 @dataclass
 class Host:
-    """Logical host aggregating a subset of VMs.
-
-    Capacity tracking is derived from attached VMs. `used_*` are computed
-    live so we never drift out of sync with the source VM records.
-    """
-    id: str                           # synthetic: f"h-{org_id}-{idx}"
+    id: str                           # synthetic formula: f"h-{org_id}-{idx}"
     name: str
     datacenter_id: str
     cpu_cores: int
@@ -92,7 +66,7 @@ class Host:
 
 @dataclass
 class Datacenter:
-    id: str                           # synthetic: f"dc-{org_id}"
+    id: str                           # again another synthetic: f"dc-{org_id}"
     name: str
     organization_id: int
     hosts: list[Host] = field(default_factory=list)
@@ -107,8 +81,7 @@ class Datacenter:
 
     @property
     def cpu_avg(self) -> float:
-        """Aggregate CPU across the whole datacenter (Module 1 §5)."""
-        total_vcpu = sum(h.used_vcpu for h in self.hosts)
+         total_vcpu = sum(h.used_vcpu for h in self.hosts)
         if total_vcpu <= 0:
             return 0.0
         weighted = sum(h.cpu_avg * h.used_vcpu for h in self.hosts)
@@ -137,10 +110,6 @@ class Datacenter:
 
 
 def _bin_pack_vms_into_hosts(org_id: int, dc_id: str, vms: Iterable[VirtualMachine]) -> list[Host]:
-    """First-fit-decreasing bin packing of VMs onto host templates.
-
-    Deterministic: sorted by vCPU desc then id asc. No randomness.
-    """
     sorted_vms = sorted(vms, key=lambda v: (-(v.vcpu or 1), v.id))
     hosts: list[Host] = []
     idx = 0
@@ -170,12 +139,7 @@ def _bin_pack_vms_into_hosts(org_id: int, dc_id: str, vms: Iterable[VirtualMachi
 
 
 def build_topology(org_id: int) -> Datacenter:
-    """Return a deterministic Datacenter → Host → VM view for the org.
-
-    Only non-terminated VMs are included. Terminated VMs are excluded so the
-    topology reflects live capacity.
-    """
-    vms = (
+     vms = (
         VirtualMachine.query
         .filter(VirtualMachine.organization_id == org_id)
         .filter(VirtualMachine.status != ResourceStatus.TERMINATED)
@@ -192,11 +156,7 @@ def build_topology(org_id: int) -> Datacenter:
 
 
 def aggregate_via_topology(org_id: int) -> dict:
-    """Module 1 §5: cpu_avg/memory_avg computed VM → Host → Datacenter.
-
-    Returns compact metrics plus the full nested topology dict.
-    """
-    dc = build_topology(org_id)
+   dc = build_topology(org_id)
     return {
         "cpu_avg": round(dc.cpu_avg, 2),
         "memory_avg": round(dc.memory_avg, 2),
