@@ -1,213 +1,155 @@
-# ☁️ Cloud Policy, Cost and Security Simulator
+# ☁️ Cloud Policy, Cost & Security Simulator
 
-### A Digital Twin Cloud Environment for Learning Cloud Operations, Governance, FinOps, and Security Monitoring
+### A Digital Twin Platform for Learning Cloud Operations, Governance, FinOps & Security
 
 <p align="center">
-
-<img src="docs/screenshots/Dashboard.png" width="800">
-
+  <img src="docs/screenshots/Dashboard.png" width="800">
 </p>
 
+---
 
 ## 🌐 Overview
 
-The **Cloud Policy, Cost and Security Simulator** is a web-based Digital Twin platform designed to provide a safe and practical environment for understanding modern cloud operations.
+The Cloud Policy, Cost & Security Simulator is a web-based Digital Twin platform developed as a university capstone project. It simulates cloud resources, security events, governance policies, and cost management so users can explore cloud operations without needing access to a real cloud environment.
 
-Cloud platforms such as AWS, Azure, and Google Cloud provide powerful infrastructure capabilities, but learning real-world cloud management often requires expensive resources, complex configurations, and careful security practices.
+Instead of deploying infrastructure on AWS, Azure, or Google Cloud, the platform creates a simulated environment where users can manage resources, monitor activity, apply policies, analyze costs, and observe security events in one place.
 
-This project addresses that challenge by creating a simulated cloud environment where learners can experiment with infrastructure management, governance policies, cost analysis, monitoring, and security workflows without the risks associated with production environments.
-
-The platform combines **cloud simulation, cybersecurity awareness, governance automation, and visualization-driven learning** into a single educational environment.
+The goal is to make cloud concepts easier to understand through hands-on interaction while avoiding the cost and complexity of production cloud platforms.
 
 ---
 
-# 🎯 Project Vision
+## ✨ Features
 
-The goal of this project is to bridge the gap between:
-
-**Cloud theory** → **Practical cloud operations**
-
-by allowing users to experience workflows commonly found in real cloud environments:
-
-- Creating and managing simulated resources
-- Monitoring infrastructure behavior
-- Understanding cloud costs
-- Applying governance rules
-- Observing security events
-- Analyzing operational reports
-
-
----
-
-# ✨ Key Features
-
-## 🔐 Identity & Organization Management
+### 🔐 Identity & Organization Management
 
 - User authentication
-- Profile management
-- Organization-based isolation
+- Organization management
 - Role-based member management
-- Secure workspace handling
+- Profile management
 
-
-## ☁️ Cloud Resource Simulation
-
-Simulates cloud infrastructure components including:
+### ☁️ Cloud Resource Simulation
 
 - Virtual machines
 - Databases
-- Resource lifecycle management
-- Runtime monitoring
+- Resource lifecycle simulation
 - Synthetic telemetry generation
 
-
-## 📊 Cloud Monitoring Dashboard
-
-Provides visibility into simulated environments through:
+### 📊 Monitoring Dashboard
 
 - Resource metrics
 - Infrastructure status
 - Operational dashboards
-- Visualization-based analysis
+- System visualization
 
+### 🛡️ Security Monitoring
 
-## 🛡️ Security Monitoring & Threat Detection
-
-Includes security-oriented workflows:
-
-- Simulated traffic analysis
-- Threat identification
+- Threat detection
 - Security alerts
 - Risk summaries
-- Incident awareness
+- Incident monitoring
 
+### 📜 Governance & Policies
 
-## 📜 Cloud Governance & Policy Management
-
-Supports understanding of cloud governance concepts:
-
-- Policy creation
-- Compliance validation
+- Policy management
+- Compliance checks
 - Governance scoring
-- Audit activity tracking
+- Audit tracking
 
+### 💰 Cost Management
 
-## 💰 Cost Management & FinOps Simulation
-
-Helps learners understand cloud financial operations:
-
-- Cost trends
+- Cost analysis
 - Budget visualization
-- Resource wastage awareness
+- Resource usage insights
 - Cost forecasting
 
+### 📑 Reports
 
-## 📑 Reporting & Analysis
-
-Generates operational insights through:
-
-- Security summaries
+- Security reports
 - Cost reports
 - Activity history
-- System analysis
-
+- Operational summaries
 
 ---
 
-# 🏗️ System Architecture
+## 🏗️ System Architecture
 
-```
+```text
                     User
-                     |
-                     |
+                     │
               React Frontend
-                     |
-                     |
-              REST API Layer
-                     |
-                     |
-             Flask Backend
-                     |
-        -------------------------
-        |           |           |
+                     │
+               REST API Layer
+                     │
+              Flask Backend
+                     │
+      ───────────────────────────
+      │            │            │
  Authentication  Simulation  Security
-        |
-   PostgreSQL Database
-        |
- AI Models + Synthetic Data Engine
+                     │
+             PostgreSQL Database
+                     │
+      AI Models + Synthetic Data
 ```
 
 ---
 
-# 🧩 System Modules
+## 🧩 Project Modules
 
-## Completed Modules
+### Completed
 
-✅ Authentication  
-✅ Organization Manager  
-✅ Data Generator  
-✅ Resource Simulator  
-✅ Resource Viewer  
-✅ Threat Detector  
+- ✅ Authentication
+- ✅ Organization Manager
+- ✅ Data Generator
+- ✅ Resource Simulator
+- ✅ Resource Viewer
+- ✅ Threat Detector
 
+### In Progress
 
-## Semester 8 Development
-
-🚧 Policy Engine  
-🚧 Cost Forecaster  
-🚧 Report Generator  
-🚧 Remediation Agent  
-🚧 Audit Trail  
-🚧 User Settings  
-
-
-The project is continuously evolving with additional cloud management and security capabilities.
+- 🚧 Policy Engine
+- 🚧 Cost Forecaster
+- 🚧 Report Generator
+- 🚧 Remediation Agent
+- 🚧 Audit Trail
+- 🚧 User Settings
 
 ---
 
-# 🛠️ Technology Stack
+## 🛠️ Technology Stack
 
-## Frontend
+### Frontend
 
-- React.js
+- React
 - JavaScript
 - Tailwind CSS
 - Redux
 
-
-## Backend
+### Backend
 
 - Python
 - Flask
 - REST APIs
 
-
-## Database
+### Database
 
 - PostgreSQL
 
+### AI & Security
 
-## Security & AI Components
-
-- Machine Learning based analysis
-- Synthetic telemetry generation
+- Machine Learning
+- Synthetic telemetry
 - Security event simulation
-
 
 ---
 
-# 📂 Repository Structure
+## 📂 Repository Structure
 
-```
+```text
 Cloud-Policy-Cost-and-Security-Simulator/
 
-│
-├── backend/        → Flask backend and simulation logic
-│
-├── frontend/       → React user interface
-│
-├── docs/           → Reports, diagrams, demonstrations, screenshots
-│
+├── backend/
+├── frontend/
+├── docs/
 ├── start_backend.bat
 ├── start_frontend.bat
 └── start_all.bat
@@ -215,88 +157,61 @@ Cloud-Policy-Cost-and-Security-Simulator/
 
 ---
 
-# 📸 Application Preview
+## 📸 Screenshots
 
-
-## Dashboard
+### Dashboard
 
 <img src="docs/screenshots/Dashboard.png">
 
-
-## Security Monitoring
+### Security Monitoring
 
 <img src="docs/screenshots/Threat Detection.png">
 
-
-## Resource Simulation
+### Resource Simulation
 
 <img src="docs/screenshots/Resource Simulator.png">
 
+---
+
+## 📚 Documentation
+
+Project reports, diagrams, screenshots, and demonstration material are available in the `docs/` directory.
 
 ---
 
-# 📚 Documentation
+## 🚀 Future Work
 
-Detailed project documentation is available inside the [`docs`](docs/) directory.
+Planned improvements include:
 
-Includes:
-
-- Project proposal
-- Final report
-- System diagrams
-- Sequence diagrams
-- Demonstration videos
-- Application screenshots
-
-
----
-
-# 🚀 Future Development
-
-Future improvements focus on increasing realism and extending the simulator toward advanced cloud security education.
-
-Planned enhancements include:
-
-- More realistic cloud workload simulation
-- Advanced threat detection techniques
-- Automated remediation workflows
-- Improved governance automation
+- More realistic cloud workloads
+- Better threat detection
+- Automated remediation
+- Expanded governance features
 - Additional learning scenarios
 
+---
+
+## 🎓 Academic Context
+
+**Project Type:** Final Year Project
+
+**Domain:** Cloud Computing • Cybersecurity • Digital Twins • Cloud Governance
+
+This project explores how simulation can provide practical cloud learning without relying on production cloud infrastructure.
 
 ---
 
-# 🎓 Academic Context
-
-**Project Type:** Final Year Project  
-**Domain:** Cloud Computing | Cybersecurity | Digital Twins | Cloud Governance
-
-This project explores how simulation-based environments can improve practical cloud learning by providing safe experimentation without dependency on production cloud infrastructure.
-
-
----
-
-# 👩‍💻 Author
+## 👩‍💻 Authors
 
 **Maryam Shahzad**
 
-Computer Science Undergraduate  
-Research Interests:
+Computer Science Undergraduate
 
-- Cloud Security
-- Digital Forensics
-- Cybersecurity
-- Secure Cloud Computing
+**Project Team Members**
 
-### 👨‍💻 Muhammad Abdur Rehman Khan
-
-**Project Team Member**
-
-
-### 👩‍💻 Wasfa Nauman Bhatti
-
-**Project Team Member**
+- Muhammad Abdur Rehman Khan
+- Wasfa Nauman Bhatti
 
 ---
 
-⭐ If you find this project interesting, feel free to explore the documentation and implementation details.
+⭐ Feel free to explore the project, documentation, and source code.
